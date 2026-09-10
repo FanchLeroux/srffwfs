@@ -8,3 +8,11 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Ignore everything in the data and output folders
+data/**
+outputs/**
+
+# Exception for .gitkeep
+!*/
+!**/.gitkeep
