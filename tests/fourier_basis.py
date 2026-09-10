@@ -7,7 +7,9 @@ from srffwfs.miscellaneous import pad_array
 
 n_px = 20
 dimension = 10
-n_mode = 10
+n_mode = -1
+zp_factor = 4
+stroke = 0.3  # [rad RMS]
 
 labels = get_labels(dimension, remove_piston=True)
 
@@ -17,16 +19,18 @@ fourier_basis = compute_fourier_basis(
 
 fourier_basis_flat = fourier_basis.reshape(fourier_basis.shape[0], -1)
 
-stroke = 0.1  # [rad RMS]
-
 psf = (
     np.abs(
         np.fft.fftshift(
-            np.fft.fft2(pad_array(np.exp(1j * stroke * fourier_basis[n_mode]), 2))
+            np.fft.fft2(
+                pad_array(np.exp(1j * stroke * fourier_basis[n_mode]), factor=zp_factor)
+            )
         )
     )
     ** 2
 )
+
+psf /= psf.max()  # normalize max to 1
 
 print(f"fourier basis shape: {fourier_basis.shape}")
 for label in labels:
@@ -53,7 +57,10 @@ plt.ylabel("Standard deviation")
 plt.figure()
 plt.imshow(
     psf,
-    norm=LogNorm(),
+    norm=LogNorm(
+        vmin=1e-3,
+        vmax=1,
+    ),
     cmap="inferno",
 )
 plt.title(f"Fourier transform of mode: {labels[n_mode]}")

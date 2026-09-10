@@ -76,6 +76,7 @@ def compute_fourier_basis(
     n_pixels: int,
     labels: list | None = None,
     remove_piston: bool = False,
+    pupil_mask: np.ndarray | None = None,
     return_labels: bool = False,
 ):
     basis = []
@@ -86,7 +87,7 @@ def compute_fourier_basis(
     for nu_x, nu_y, kind in labels:
         if kind == "piston" and remove_piston:
             continue
-        mode = compute_fourier_mode(n_pixels, nu_x, nu_y, kind)
+        mode = compute_fourier_mode(n_pixels, nu_x, nu_y, kind, pupil_mask)
         basis.append(mode)
 
     basis = np.array(basis)
