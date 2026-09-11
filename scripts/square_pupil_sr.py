@@ -19,7 +19,7 @@ extra_px = (
 
 n_px = extra_sampling_factor * n_sampling_points + extra_px
 
-labels = get_labels(n_sampling_points, remove_piston=True)
+labels = get_labels(int(1.5 * n_sampling_points), remove_piston=True)
 fourier_basis = compute_fourier_basis(
     n_px, labels=labels, remove_piston=True, pupil_mask=None, return_labels=False
 )
@@ -42,16 +42,16 @@ plt.imshow(np.abs(fourier_basis_gram_matrix))
 mode_index = -1
 
 fourier_basis_binned_1 = bin_2d(
-    fourier_basis[:, :-extra_px, :-extra_px], extra_sampling_factor // 2
+    fourier_basis[:, :-extra_px, :-extra_px], extra_sampling_factor
 )
 fourier_basis_binned_2 = bin_2d(
-    fourier_basis[:, :-extra_px, extra_px:], extra_sampling_factor // 2
+    fourier_basis[:, :-extra_px, extra_px:], extra_sampling_factor
 )
 fourier_basis_binned_3 = bin_2d(
-    fourier_basis[:, extra_px:, :-extra_px], extra_sampling_factor // 2
+    fourier_basis[:, extra_px:, :-extra_px], extra_sampling_factor
 )
 fourier_basis_binned_4 = bin_2d(
-    fourier_basis[:, extra_px:, extra_px:], extra_sampling_factor // 2
+    fourier_basis[:, extra_px:, extra_px:], extra_sampling_factor
 )
 
 print(f"fourier_basis_binned_1 shape: {fourier_basis_binned_1.shape}")
@@ -61,16 +61,17 @@ print(f"fourier_basis_binned_4 shape: {fourier_basis_binned_4.shape}")
 
 fig, ax = plt.subplots(1, 1, constrained_layout=True)
 ax.imshow(fourier_basis[mode_index], cmap="gray")
+ax.set_title("Original Fourier Mode")
 
 fig, axs = plt.subplots(2, 2, constrained_layout=True)
 axs[0, 0].imshow(fourier_basis_binned_1[mode_index], cmap="gray")
-axs[0, 0].set_title("Binned Fourier Basis Mode")
+axs[0, 0].set_title("Binned Fourier Mode 1")
 axs[0, 1].imshow(fourier_basis_binned_2[mode_index], cmap="gray")
-axs[0, 1].set_title("Binned Fourier Basis Mode")
+axs[0, 1].set_title("Binned Fourier Mode 2")
 axs[1, 0].imshow(fourier_basis_binned_3[mode_index], cmap="gray")
-axs[1, 0].set_title("Binned Fourier Basis Mode")
+axs[1, 0].set_title("Binned Fourier Mode 3")
 axs[1, 1].imshow(fourier_basis_binned_4[mode_index], cmap="gray")
-axs[1, 1].set_title("Binned Fourier Basis Mode")
+axs[1, 1].set_title("Binned Fourier Mode 4")
 
 fourier_basis_binned_1_flat = fourier_basis_binned_1.reshape(
     fourier_basis_binned_1.shape[0], -1
@@ -148,6 +149,10 @@ axs[1, 0].semilogy(s3, marker="+")
 axs[1, 0].set_title("Singular Values - Binned Fourier Basis 3")
 axs[1, 1].semilogy(s4, marker="+")
 axs[1, 1].set_title("Singular Values - Binned Fourier Basis 4")
+
+plt.figure()
+plt.semilogy(sall, marker="+")
+plt.title("Singular Values - Binned Fourier Basis All")
 
 plt.show()
 
