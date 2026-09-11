@@ -19,7 +19,7 @@ extra_px = (
 
 n_px = extra_sampling_factor * n_sampling_points + extra_px
 
-labels = get_labels(int(1.5 * n_sampling_points), remove_piston=True)
+labels = get_labels(int(2 * n_sampling_points), remove_piston=True)
 fourier_basis = compute_fourier_basis(
     n_px, labels=labels, remove_piston=True, pupil_mask=None, return_labels=False
 )
@@ -109,11 +109,56 @@ axs[1, 0].set_title("Binned Fourier Basis 3 Gram Matrix")
 axs[1, 1].imshow(np.abs(fourier_basis_binned_4_gram_matrix))
 axs[1, 1].set_title("Binned Fourier Basis 4 Gram Matrix")
 
+fourier_basis_binned_1_flat = np.vstack(
+    (
+        fourier_basis_binned_1_flat,
+        fourier_basis_binned_1_flat,
+        fourier_basis_binned_1_flat,
+        fourier_basis_binned_1_flat,
+    )
+)
+
+fourier_basis_binned_2_flat = np.vstack(
+    (
+        fourier_basis_binned_2_flat,
+        fourier_basis_binned_2_flat,
+        fourier_basis_binned_2_flat,
+        fourier_basis_binned_2_flat,
+    )
+)
+
+fourier_basis_binned_3_flat = np.vstack(
+    (
+        fourier_basis_binned_3_flat,
+        fourier_basis_binned_3_flat,
+        fourier_basis_binned_3_flat,
+        fourier_basis_binned_3_flat,
+    )
+)
+
+fourier_basis_binned_4_flat = np.vstack(
+    (
+        fourier_basis_binned_4_flat,
+        fourier_basis_binned_4_flat,
+        fourier_basis_binned_4_flat,
+        fourier_basis_binned_4_flat,
+    )
+)
+
 fourier_basis_binned_all_flat = np.vstack(
     (
         fourier_basis_binned_1_flat,
         fourier_basis_binned_2_flat,
         fourier_basis_binned_3_flat,
+        fourier_basis_binned_4_flat,
+    )
+)
+
+fourier_basis_binned_2_grids_flat = np.vstack(
+    (
+        fourier_basis_binned_1_flat,
+        fourier_basis_binned_4_flat,
+        fourier_basis_binned_1_flat,
         fourier_basis_binned_4_flat,
     )
 )
@@ -133,11 +178,13 @@ u4, s4, vt4 = np.linalg.svd(fourier_basis_binned_4_flat, full_matrices=False)
 uall, sall, vtall = np.linalg.svd(
     fourier_basis_binned_all_gram_matrix, full_matrices=False
 )
+u2g, s2g, vt2g = np.linalg.svd(fourier_basis_binned_2_grids_flat, full_matrices=False)
 
 print(f"cond1: {s1.max() / s1.min()}")
 print(f"cond2: {s2.max() / s2.min()}")
 print(f"cond3: {s3.max() / s3.min()}")
 print(f"cond4: {s4.max() / s4.min()}")
+print(f"cond2g: {s2g.max() / s2g.min()}")
 print(f"condall: {sall.max() / sall.min()}")
 
 fig, axs = plt.subplots(2, 2, constrained_layout=True)
@@ -153,6 +200,10 @@ axs[1, 1].set_title("Singular Values - Binned Fourier Basis 4")
 plt.figure()
 plt.semilogy(sall, marker="+")
 plt.title("Singular Values - Binned Fourier Basis All")
+
+plt.figure()
+plt.semilogy(s2g, marker="+")
+plt.title("Singular Values - Binned Fourier Basis 2 Grids")
 
 plt.show()
 
