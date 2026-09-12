@@ -109,7 +109,7 @@ axs[1, 0].set_title("Binned Fourier Basis 3 Gram Matrix")
 axs[1, 1].imshow(np.abs(fourier_basis_binned_4_gram_matrix))
 axs[1, 1].set_title("Binned Fourier Basis 4 Gram Matrix")
 
-fourier_basis_binned_1_flat = np.vstack(
+fourier_basis_binned_1_flat_stacked = np.vstack(
     (
         fourier_basis_binned_1_flat,
         fourier_basis_binned_1_flat,
@@ -118,7 +118,7 @@ fourier_basis_binned_1_flat = np.vstack(
     )
 )
 
-fourier_basis_binned_2_flat = np.vstack(
+fourier_basis_binned_2_flat_stacked = np.vstack(
     (
         fourier_basis_binned_2_flat,
         fourier_basis_binned_2_flat,
@@ -127,7 +127,7 @@ fourier_basis_binned_2_flat = np.vstack(
     )
 )
 
-fourier_basis_binned_3_flat = np.vstack(
+fourier_basis_binned_3_flat_stacked = np.vstack(
     (
         fourier_basis_binned_3_flat,
         fourier_basis_binned_3_flat,
@@ -136,7 +136,7 @@ fourier_basis_binned_3_flat = np.vstack(
     )
 )
 
-fourier_basis_binned_4_flat = np.vstack(
+fourier_basis_binned_4_flat_stacked = np.vstack(
     (
         fourier_basis_binned_4_flat,
         fourier_basis_binned_4_flat,
@@ -145,7 +145,7 @@ fourier_basis_binned_4_flat = np.vstack(
     )
 )
 
-fourier_basis_binned_all_flat = np.vstack(
+fourier_basis_binned_all_flat_stacked = np.vstack(
     (
         fourier_basis_binned_1_flat,
         fourier_basis_binned_2_flat,
@@ -154,7 +154,7 @@ fourier_basis_binned_all_flat = np.vstack(
     )
 )
 
-fourier_basis_binned_2_grids_flat = np.vstack(
+fourier_basis_binned_2_grids_flat_stacked = np.vstack(
     (
         fourier_basis_binned_1_flat,
         fourier_basis_binned_4_flat,
@@ -164,21 +164,23 @@ fourier_basis_binned_2_grids_flat = np.vstack(
 )
 
 fourier_basis_binned_all_gram_matrix = (
-    fourier_basis_binned_all_flat.T @ fourier_basis_binned_all_flat
+    fourier_basis_binned_all_flat_stacked.T @ fourier_basis_binned_all_flat_stacked
 )
 
 plt.figure()
 plt.title("Gram Matrix - all binned Fourier Basis")
 plt.imshow(np.abs(fourier_basis_binned_all_gram_matrix))
 
-u1, s1, vt1 = np.linalg.svd(fourier_basis_binned_1_flat, full_matrices=False)
-u2, s2, vt2 = np.linalg.svd(fourier_basis_binned_2_flat, full_matrices=False)
-u3, s3, vt3 = np.linalg.svd(fourier_basis_binned_3_flat, full_matrices=False)
-u4, s4, vt4 = np.linalg.svd(fourier_basis_binned_4_flat, full_matrices=False)
+u1, s1, vt1 = np.linalg.svd(fourier_basis_binned_1_flat_stacked, full_matrices=False)
+u2, s2, vt2 = np.linalg.svd(fourier_basis_binned_2_flat_stacked, full_matrices=False)
+u3, s3, vt3 = np.linalg.svd(fourier_basis_binned_3_flat_stacked, full_matrices=False)
+u4, s4, vt4 = np.linalg.svd(fourier_basis_binned_4_flat_stacked, full_matrices=False)
 uall, sall, vtall = np.linalg.svd(
-    fourier_basis_binned_all_gram_matrix, full_matrices=False
+    fourier_basis_binned_all_flat_stacked, full_matrices=False
 )
-u2g, s2g, vt2g = np.linalg.svd(fourier_basis_binned_2_grids_flat, full_matrices=False)
+u2g, s2g, vt2g = np.linalg.svd(
+    fourier_basis_binned_2_grids_flat_stacked, full_matrices=False
+)
 
 print(f"cond1: {s1.max() / s1.min()}")
 print(f"cond2: {s2.max() / s2.min()}")
@@ -208,3 +210,72 @@ plt.title("Singular Values - Binned Fourier Basis 2 Grids")
 plt.show()
 
 # %%
+mode_index = 0
+
+eigenmodes_1 = u1[:, :100].T.reshape(
+    100,
+    2 * fourier_basis_binned_1.shape[1],
+    2 * fourier_basis_binned_1.shape[2],
+)
+
+plt.figure()
+plt.imshow(
+    eigenmodes_1[mode_index],
+    cmap="gray",
+)
+plt.title(f"Left Singular mode {mode_index} - Binned Fourier Basis 1")
+
+fp1 = np.sum(
+    np.abs(
+        np.fft.fftshift(
+            np.fft.fft2(
+                eigenmodes_1,
+                axes=(1, 2),
+            ),
+            axes=(1, 2),
+        )
+    ),
+    axis=0,
+)
+
+eigenmodes_2g = u2g[:, :399].T.reshape(
+    399,
+    2 * fourier_basis_binned_1.shape[1],
+    2 * fourier_basis_binned_1.shape[2],
+)
+
+fp2g = np.sum(
+    np.abs(
+        np.fft.fftshift(
+            np.fft.fft2(
+                eigenmodes_2g,
+                axes=(1, 2),
+            ),
+            axes=(1, 2),
+        )
+    ),
+    axis=0,
+)
+
+eigenmodes_all = uall.T.reshape(
+    399,
+    2 * fourier_basis_binned_1.shape[1],
+    2 * fourier_basis_binned_1.shape[2],
+)
+
+fp_all = np.sum(
+    np.abs(np.fft.fftshift(np.fft.fft2(eigenmodes_all, axes=(1, 2)), axes=(1, 2))),
+    axis=0,
+)
+
+plt.figure()
+plt.imshow(np.abs(fp1), cmap="gray")
+plt.title(f"FFT of Left Singular mode {mode_index} - Binned Fourier Basis 1")
+
+
+plt.figure()
+plt.imshow(np.abs(fp2g), cmap="gray")
+plt.title(f"FFT of Left Singular mode {mode_index} - Binned Fourier Basis 2 Grids")
+
+plt.figure()
+plt.imshow(fp_all, cmap="gray")
