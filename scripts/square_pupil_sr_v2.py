@@ -20,6 +20,9 @@ extra_px = (
 n_px = extra_sampling_factor * n_sampling_points + extra_px
 
 labels = get_labels(int(2 * n_sampling_points), remove_piston=True)
+
+fig = draw_labels(labels)
+
 fourier_basis = compute_fourier_basis(
     n_px, labels=labels, remove_piston=True, pupil_mask=None, return_labels=False
 )
@@ -157,10 +160,6 @@ axs[1, 0].imshow(np.abs(vt2g))
 axs[1, 0].set_title("V^T - Binned Fourier Basis 2 Grids")
 axs[1, 1].imshow(np.abs(vtall))
 axs[1, 1].set_title("V^T - Binned Fourier Basis All")
-
-# %%
-
-fig = draw_labels(labels)
 
 # %%
 
