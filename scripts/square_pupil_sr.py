@@ -40,7 +40,6 @@ plt.imshow(np.abs(fourier_basis_gram_matrix))
 # %%
 
 mode_index = -1
-
 fourier_basis_binned_1 = bin_2d(
     fourier_basis[:, :-extra_px, :-extra_px], extra_sampling_factor
 )
@@ -212,8 +211,8 @@ plt.show()
 # %%
 mode_index = 0
 
-eigenmodes_1 = u1[:, :100].T.reshape(
-    100,
+eigenmodes_1 = u1.T.reshape(
+    u1.shape[1],
     2 * fourier_basis_binned_1.shape[1],
     2 * fourier_basis_binned_1.shape[2],
 )
@@ -238,8 +237,8 @@ fp1 = np.sum(
     axis=0,
 )
 
-eigenmodes_2g = u2g[:, :399].T.reshape(
-    399,
+eigenmodes_2g = u2g.T.reshape(
+    u2g.shape[1],
     2 * fourier_basis_binned_1.shape[1],
     2 * fourier_basis_binned_1.shape[2],
 )
@@ -258,7 +257,7 @@ fp2g = np.sum(
 )
 
 eigenmodes_all = uall.T.reshape(
-    399,
+    uall.shape[1],
     2 * fourier_basis_binned_1.shape[1],
     2 * fourier_basis_binned_1.shape[2],
 )
@@ -279,3 +278,55 @@ plt.title(f"FFT of Left Singular mode {mode_index} - Binned Fourier Basis 2 Grid
 
 plt.figure()
 plt.imshow(fp_all, cmap="gray")
+
+# %%
+
+mode_index = 0
+
+fig, axs = plt.subplots(2, 2, constrained_layout=True)
+axs[0, 0].imshow(eigenmodes_1[mode_index], cmap="gray")
+axs[0, 0].set_title(f"Left Singular mode {mode_index} - Binned Fourier Basis 1")
+axs[0, 1].imshow(eigenmodes_2g[mode_index], cmap="gray")
+axs[0, 1].set_title(f"Left Singular mode {mode_index} - Binned Fourier Basis 2 Grids")
+axs[1, 0].imshow(eigenmodes_all[mode_index], cmap="gray")
+axs[1, 0].set_title(f"Left Singular mode {mode_index} - Binned Fourier Basis All")
+axs[1, 1].axis("off")
+
+# %%
+
+# Number of SVD modes to keep
+n_modes = 200
+
+# First 200 left singular vectors
+U200 = u2g[:, :n_modes]
+
+# Original matrix
+A = fourier_basis_binned_2_grids_flat_stacked
+
+# Project every original Fourier mode onto the 200-dimensional subspace
+projection = U200.T @ A
+
+# Fraction of each Fourier mode captured by the subspace
+projection_fraction = np.sum(np.abs(projection) ** 2, axis=0) / np.sum(
+    np.abs(A) ** 2, axis=0
+)
+
+# Reshape into the original Fourier-space grid
+projection_map = projection_fraction.reshape(
+    fourier_basis_binned_1.shape[1],
+    fourier_basis_binned_1.shape[2],
+)
+
+# Plot
+plt.figure(figsize=(5, 5))
+plt.imshow(
+    np.fft.fftshift(projection_map),
+    origin="lower",
+    vmin=0,
+    vmax=1,
+)
+plt.colorbar(label="Fraction captured by first 200 SVD modes")
+plt.xlabel(r"$f_x$")
+plt.ylabel(r"$f_y$")
+plt.tight_layout()
+plt.show()

@@ -40,6 +40,15 @@ def get_labels(dimension: int, remove_piston: bool = False):
                 labels.append((nu_x, nu_y, "cos"))
                 labels.append((nu_x, nu_y, "sin"))
 
+    labels.sort(
+        key=lambda label: (
+            label[0] ** 2 + label[1] ** 2,
+            label[0],
+            label[1],
+            label[2],
+        )
+    )
+
     return labels
 
 
