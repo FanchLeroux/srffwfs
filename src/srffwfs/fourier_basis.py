@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def get_labels(dimension: int, remove_piston: bool = False):
@@ -104,3 +105,36 @@ def compute_fourier_basis(
     if return_labels:
         return basis, labels
     return basis
+
+
+def draw_labels(labels):
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.set_aspect("equal")
+
+    for nu_x, nu_y, kind in labels:
+        if kind == "piston":
+            ax.plot(
+                nu_x,
+                nu_y,
+                marker="o",
+                color="green",
+                markersize=8,
+            )
+        if kind == "cos":
+            ax.plot(
+                nu_x,
+                nu_y,
+                marker="o",
+                color="red",
+                markersize=8,
+            )
+        if kind == "sin":
+            ax.plot(
+                nu_x,
+                nu_y,
+                marker="+",
+                color="blue",
+                markersize=8,
+            )
+
+    return fig
