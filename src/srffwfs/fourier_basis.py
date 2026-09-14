@@ -137,4 +137,22 @@ def draw_labels(labels):
                 markersize=8,
             )
 
-    return fig
+    return fig, ax
+
+
+def rotate_fourier_labels(
+    labels,
+    angle=np.pi / 4,
+):
+    cos_a = np.cos(angle)
+    sin_a = np.sin(angle)
+
+    rotated_labels = []
+
+    for nu_x, nu_y, kind in labels:
+        fx = cos_a * nu_x - sin_a * nu_y
+        fy = sin_a * nu_x + cos_a * nu_y
+
+        rotated_labels.append((fx, fy, kind))
+
+    return rotated_labels

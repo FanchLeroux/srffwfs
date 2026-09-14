@@ -3,7 +3,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from srffwfs.fourier_basis import draw_labels, get_labels, compute_fourier_basis
+from srffwfs.fourier_basis import (
+    draw_labels,
+    get_labels,
+    compute_fourier_basis,
+    rotate_fourier_labels,
+)
 from srffwfs.binning import bin_2d
 
 # %%
@@ -19,12 +24,15 @@ extra_px = (
 
 n_px = extra_sampling_factor * n_sampling_points + extra_px
 
-labels = get_labels(int(2 * n_sampling_points), remove_piston=True)
+labels = get_labels(int(n_sampling_points), remove_piston=True)
+labels_sr = get_labels(int(2 * n_sampling_points), remove_piston=True)
 
-fig = draw_labels(labels)
+fig, ax = draw_labels(labels)
+
+fig_sr, ax_sr = draw_labels(labels_sr)
 
 fourier_basis = compute_fourier_basis(
-    n_px, labels=labels, remove_piston=True, pupil_mask=None, return_labels=False
+    n_px, labels=labels_sr, remove_piston=True, pupil_mask=None, return_labels=False
 )
 
 fourier_basis_flat = fourier_basis.reshape(fourier_basis.shape[0], -1).T
@@ -175,3 +183,29 @@ plt.figure()
 plt.imshow(eigen_modes_2g[eigen_mode_index])
 plt.title(f"Eigenmode {eigen_mode_index} - Binned Fourier Basis 2 Grids")
 plt.show()
+
+# %%
+
+n_rotated = round(2 * n_sampling_points / np.sqrt(2))
+
+labels_rotated = get_labels(
+    n_rotated,
+    remove_piston=True,
+)
+
+labels_rotated = rotate_fourier_labels(
+    labels_rotated,
+    angle=np.pi / 4,
+)
+
+fourier_basis_rotated = compute_fourier_basis(
+    n_px,
+    labels=labels_rotated,
+    remove_piston=True,
+    pupil_mask=None,
+    return_labels=False,
+)
+
+fourier_basis_rotated_flat = fourier_basis_rotated.reshape(
+    fourier_basis_rotated.shape[0], -1
+).T
