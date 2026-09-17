@@ -64,8 +64,8 @@ def compute_fourier_mode(
 ):
     coords = np.arange(-n_pixels // 2, n_pixels // 2)
     X, Y = np.meshgrid(coords, coords)
-    X += shift_x
-    Y += shift_y
+    X = X - shift_x
+    Y = Y - shift_y
 
     phase = 2 * np.pi * (nu_x * X + nu_y * Y) / n_pixels
 
