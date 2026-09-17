@@ -107,7 +107,7 @@ def compute_fourier_basis(
     return basis
 
 
-def draw_labels(labels):
+def draw_labels(labels, plot_hermitian=False):
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.set_aspect("equal")
 
@@ -137,7 +137,97 @@ def draw_labels(labels):
                 markersize=8,
             )
 
+        if plot_hermitian:
+            ax.plot(
+                -nu_x,
+                -nu_y,
+                marker="x",
+                color="grey",
+                markersize=8,
+            )
+
     return fig, ax
+
+
+def draw_multiple_labels(
+    labels_list,
+    titles=None,
+    plot_hermitian=False,
+    ncols=None,
+    markersize=4,
+    figsize=None,
+):
+
+    n = len(labels_list)
+
+    if ncols is None:
+        ncols = n
+
+    nrows = int(np.ceil(n / ncols))
+
+    if figsize is None:
+        figsize = (4 * ncols, 4 * nrows)
+
+    fig, axes = plt.subplots(
+        nrows,
+        ncols,
+        figsize=figsize,
+        squeeze=False,
+    )
+
+    axes = axes.ravel()
+
+    for i, labels in enumerate(labels_list):
+        ax = axes[i]
+        ax.set_aspect("equal")
+
+        for nu_x, nu_y, kind in labels:
+            if kind == "piston":
+                ax.plot(
+                    nu_x,
+                    nu_y,
+                    marker="o",
+                    color="green",
+                    markersize=markersize,
+                )
+
+            elif kind == "cos":
+                ax.plot(
+                    nu_x,
+                    nu_y,
+                    marker="o",
+                    color="red",
+                    markersize=markersize,
+                )
+
+            elif kind == "sin":
+                ax.plot(
+                    nu_x,
+                    nu_y,
+                    marker="+",
+                    color="blue",
+                    markersize=markersize,
+                )
+
+            if plot_hermitian:
+                ax.plot(
+                    -nu_x,
+                    -nu_y,
+                    marker="x",
+                    color="grey",
+                    markersize=markersize,
+                )
+
+        if titles is not None:
+            ax.set_title(titles[i])
+
+    # Hide unused axes
+    for ax in axes[n:]:
+        ax.set_visible(False)
+
+    fig.tight_layout()
+
+    return fig, axes
 
 
 def rotate_fourier_labels(

@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 
 from srffwfs.fourier_basis import (
     draw_labels,
+    draw_multiple_labels,
     get_labels,
     compute_fourier_basis,
 )
@@ -219,31 +220,18 @@ plt.title("V^T - Binned Fourier Basis All")
 
 # %%
 
-eigen_modes_2g_1_flat = fourier_basis_flat @ vt2g_1.T
+n_modes_2g = (n_sampling_points * 2) ** 2 // 2
+eigen_mode_index = n_modes_2g - 6
 
+eigen_modes_2g_1_flat = fourier_basis_flat @ vt2g_1.T
 eigen_modes_2g_1 = eigen_modes_2g_1_flat.T.reshape(
     (fourier_basis.shape[0],) + fourier_basis.shape[1:]
 )
 
-eigen_mode_index = 0
-
-plt.figure()
-plt.imshow(eigen_modes_2g_1[eigen_mode_index])
-plt.title(f"Eigenmode {eigen_mode_index} - Binned Fourier Basis 2 Grids 1")
-plt.show()
-
 eigen_modes_2g_2_flat = fourier_basis_flat @ vt2g_2.T
-
 eigen_modes_2g_2 = eigen_modes_2g_2_flat.T.reshape(
     (fourier_basis.shape[0],) + fourier_basis.shape[1:]
 )
-
-eigen_mode_index = 0
-
-plt.figure()
-plt.imshow(eigen_modes_2g_2[eigen_mode_index])
-plt.title(f"Eigenmode {eigen_mode_index} - Binned Fourier Basis 2 Grids 2")
-plt.show()
 
 eigen_modes_2g_3_flat = fourier_basis_flat @ vt2g_3.T
 
@@ -251,16 +239,15 @@ eigen_modes_2g_3 = eigen_modes_2g_3_flat.T.reshape(
     (fourier_basis.shape[0],) + fourier_basis.shape[1:]
 )
 
-eigen_mode_index = 0
-
-plt.figure()
-plt.imshow(eigen_modes_2g_3[eigen_mode_index])
-plt.title(f"Eigenmode {eigen_mode_index} - Binned Fourier Basis 2 Grids 3")
-plt.show()
+fig, axs = plt.subplots(1, 3, constrained_layout=True)
+axs[0].imshow(eigen_modes_2g_1[eigen_mode_index])
+axs[0].set_title(f"Eigenmode {eigen_mode_index} - Binned Fourier Basis 2 Grids 1")
+axs[1].imshow(eigen_modes_2g_2[eigen_mode_index])
+axs[1].set_title(f"Eigenmode {eigen_mode_index} - Binned Fourier Basis 2 Grids 2")
+axs[2].imshow(eigen_modes_2g_3[eigen_mode_index])
+axs[2].set_title(f"Eigenmode {eigen_mode_index} - Binned Fourier Basis 2 Grids 3")
 
 # %%
-
-n_modes_2g = (n_sampling_points * 2) ** 2 // 2
 
 modes_weight_2g_1 = (np.abs(vt2g_1[:n_modes_2g]) ** 2).sum(axis=0)
 first_modes_2g_1 = np.argsort(modes_weight_2g_1)[-n_modes_2g:][::-1]
@@ -303,3 +290,25 @@ draw_labels(labels_sr)
 draw_labels(first_modes_2g_3_labels)
 
 # %%
+
+fig, ax_all = draw_labels(labels_sr, plot_hermitian=True)
+fig, ax_1 = draw_labels(first_modes_2g_1_labels, plot_hermitian=True)
+fig, ax_2 = draw_labels(first_modes_2g_2_labels, plot_hermitian=True)
+fig, ax_3 = draw_labels(first_modes_2g_3_labels, plot_hermitian=True)
+
+draw_multiple_labels(
+    [
+        labels_sr,
+        first_modes_2g_1_labels,
+        first_modes_2g_2_labels,
+        first_modes_2g_3_labels,
+    ],
+    titles=[
+        "All modes",
+        "First modes\nBinned Fourier Basis 2 Grids 1 and 2",
+        "First modes\nBinned Fourier Basis 2 Grids 1 and 3",
+        "First modes\nBinned Fourier Basis 2 Grids 1 and 4",
+    ],
+    plot_hermitian=True,
+    ncols=2,
+)
