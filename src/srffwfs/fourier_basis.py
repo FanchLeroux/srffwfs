@@ -54,10 +54,18 @@ def get_labels(dimension: int, remove_piston: bool = False):
 
 
 def compute_fourier_mode(
-    n_pixels: int, nu_x: int, nu_y: int, kind="cos", pupil_mask=None
+    n_pixels: int,
+    nu_x: int,
+    nu_y: int,
+    kind="cos",
+    pupil_mask=None,
+    shift_x: float = 0.0,
+    shift_y: float = 0.0,
 ):
     coords = np.arange(-n_pixels // 2, n_pixels // 2)
     X, Y = np.meshgrid(coords, coords)
+    X += shift_x
+    Y += shift_y
 
     phase = 2 * np.pi * (nu_x * X + nu_y * Y) / n_pixels
 
@@ -88,6 +96,8 @@ def compute_fourier_basis(
     remove_piston: bool = False,
     pupil_mask: np.ndarray | None = None,
     return_labels: bool = False,
+    shift_x: float = 0.0,
+    shift_y: float = 0.0,
 ):
     basis = []
 
@@ -97,7 +107,9 @@ def compute_fourier_basis(
     for nu_x, nu_y, kind in labels:
         if kind == "piston" and remove_piston:
             continue
-        mode = compute_fourier_mode(n_pixels, nu_x, nu_y, kind, pupil_mask)
+        mode = compute_fourier_mode(
+            n_pixels, nu_x, nu_y, kind, pupil_mask, shift_x, shift_y
+        )
         basis.append(mode)
 
     basis = np.array(basis)
@@ -107,7 +119,7 @@ def compute_fourier_basis(
     return basis
 
 
-def draw_labels(labels, plot_hermitian=False):
+def draw_labels(labels, plot_hermitian=False, title=None):
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.set_aspect("equal")
 
@@ -145,6 +157,12 @@ def draw_labels(labels, plot_hermitian=False):
                 color="grey",
                 markersize=8,
             )
+
+    ax.set_xlabel(r"$\nu_x$")
+    ax.set_ylabel(r"$\nu_y$")
+
+    if title is not None:
+        ax.set_title(title)
 
     return fig, ax
 
@@ -217,6 +235,9 @@ def draw_multiple_labels(
                     color="grey",
                     markersize=markersize,
                 )
+
+            ax.set_xlabel(r"$\nu_x$")
+            ax.set_ylabel(r"$\nu_y$")
 
         if titles is not None:
             ax.set_title(titles[i])
