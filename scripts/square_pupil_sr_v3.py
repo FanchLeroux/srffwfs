@@ -10,12 +10,15 @@ from srffwfs.fourier_basis import (
     compute_fourier_basis,
 )
 from srffwfs.binning import bin_2d
+from srffwfs.config import Config
+
+config = Config()
 
 # %%
 
-n_sampling_points = 12
+n_sampling_points = 10
 extra_sampling_factor = (
-    8  # detector pixel shape is (extra_sampling_factor, extra_sampling_factor)
+    16  # detector pixel shape is (extra_sampling_factor, extra_sampling_factor)
 )
 
 extra_px = (
@@ -221,7 +224,7 @@ plt.title("V^T - Binned Fourier Basis All")
 # %%
 
 n_modes_2g = (n_sampling_points * 2) ** 2 // 2
-eigen_mode_index = n_modes_2g - 6
+eigen_mode_index = 0
 
 eigen_modes_2g_1_flat = fourier_basis_flat @ vt2g_1.T
 eigen_modes_2g_1 = eigen_modes_2g_1_flat.T.reshape(
@@ -296,7 +299,7 @@ fig, ax_1 = draw_labels(first_modes_2g_1_labels, plot_hermitian=True)
 fig, ax_2 = draw_labels(first_modes_2g_2_labels, plot_hermitian=True)
 fig, ax_3 = draw_labels(first_modes_2g_3_labels, plot_hermitian=True)
 
-draw_multiple_labels(
+fig, axs = draw_multiple_labels(
     [
         labels_sr,
         first_modes_2g_1_labels,
@@ -312,3 +315,5 @@ draw_multiple_labels(
     plot_hermitian=True,
     ncols=2,
 )
+
+fig.savefig(config.root_dir / "outputs" / "dominant_fourier_modes_2_grids.svg")
