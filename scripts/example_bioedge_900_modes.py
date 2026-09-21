@@ -6,6 +6,7 @@ Created on Mon May 12 14:37:17 2025
 """
 
 import pathlib
+from tqdm import tqdm
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,11 +19,13 @@ from OOPAO.calibration.compute_KL_modal_basis import compute_M2C
 from OOPAO.BioEdge import BioEdge
 from OOPAO.calibration.InteractionMatrix import InteractionMatrix
 
-from tqdm import tqdm
+from srffwfs.config import Config
+
+config = Config()
 
 # %%
 
-dirc = pathlib.Path(__file__).parent
+dirc = config.root_dir / "outputs"
 
 # %% define functions
 
@@ -337,6 +340,7 @@ if param["modal_basis"] == "KL":
         NDIVL=1,
         lim_inversion=1e-16,
         returnHHt_PSD_df=True,
+        save_output=False,
     )
 
     M2C = M2C_KL_full[:, 1:]  # remove piston
