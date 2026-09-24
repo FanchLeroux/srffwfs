@@ -45,7 +45,6 @@ def close_the_loop(
     seed=0,
     save_telemetry=False,
     save_psf=False,
-    display=False,
 ):
 
     wfs.cam.photonNoise = photon_noise
@@ -145,7 +144,7 @@ def close_the_loop(
             wfs_frames,
         )
     elif save_psf:
-        total, residual, strehl, short_exposure_psf
+        return total, residual, strehl, short_exposure_psf
     else:
         return total, residual, strehl
 
@@ -419,7 +418,6 @@ seed = 12  # seed for atmosphere computation
     seed=seed,
     save_telemetry=True,
     save_psf=True,
-    display=False,
 )
 
 # %% post processing
