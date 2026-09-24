@@ -11,6 +11,9 @@ from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 
+from srffwfs.config import Config
+from srffwfs import oopao_config
+
 from OOPAO.Telescope import Telescope
 from OOPAO.Atmosphere import Atmosphere
 from OOPAO.Source import Source
@@ -19,13 +22,10 @@ from OOPAO.calibration.compute_KL_modal_basis import compute_M2C
 from OOPAO.BioEdge import BioEdge
 from OOPAO.calibration.InteractionMatrix import InteractionMatrix
 
-from srffwfs.config import Config
-
-config = Config()
-
 # %%
 
-dirc = config.root_dir / "outputs"
+config = Config()
+fig_dir = config.root_dir / "outputs"
 
 # %% define functions
 
@@ -434,7 +434,7 @@ plt.plot(np.diag(R @ R.T) / gbioedge_sr.nSignal)
 plt.yscale("log")
 plt.title("modal uniform noise propagation")
 plt.xlabel("# modes")
-plt.savefig(dirc / pathlib.Path("noise_propagation" + ".png"), bbox_inches="tight")
+plt.savefig(fig_dir / pathlib.Path("noise_propagation" + ".png"), bbox_inches="tight")
 
 # %%
 
@@ -446,7 +446,7 @@ plt.xlabel("loop iteration")
 plt.ylabel("residual phase RMS [nm]")
 plt.title("Closed Loop residuals")
 plt.legend()
-plt.savefig(dirc / pathlib.Path("residuals" + ".png"), bbox_inches="tight")
+plt.savefig(fig_dir / pathlib.Path("residuals" + ".png"), bbox_inches="tight")
 
 # %%
 
@@ -456,7 +456,7 @@ plt.plot(strehl_lse_sr, label="strehl_lse_sr")
 plt.ylabel("strehl phase RMS [nm]")
 plt.title("Closed Loop strehls")
 plt.legend()
-plt.savefig(dirc / pathlib.Path("strehls" + ".png"), bbox_inches="tight")
+plt.savefig(fig_dir / pathlib.Path("strehls" + ".png"), bbox_inches="tight")
 
 # %%
 
@@ -464,6 +464,6 @@ plt.savefig(dirc / pathlib.Path("strehls" + ".png"), bbox_inches="tight")
 plt.figure()
 plt.imshow(np.log(long_exposure_psf_lse_sr))
 plt.title("long_exposure_psf_lse_sr")
-plt.savefig(dirc / pathlib.Path("long_exposure_psf" + ".png"), bbox_inches="tight")
+plt.savefig(fig_dir / pathlib.Path("long_exposure_psf" + ".png"), bbox_inches="tight")
 
 plt.show()
