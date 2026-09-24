@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "cupy-cuda13x[ctk]>=14.2.0",
     "matplotlib>=3.11.1",
     "numpy>=2.5.3",
 ]
@@ -21,5 +22,6 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "cupy-cuda13x>=14.2.0",
     "ipykernel>=7.3.0",
 ]
