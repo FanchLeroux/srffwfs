@@ -1006,29 +1006,30 @@ name = "srffwfs"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "cupy-cuda13x", extra = ["ctk"] },
     { name = "matplotlib" },
     { name = "numpy" },
 ]
 
+[package.optional-dependencies]
+gpu = [
+    { name = "cupy-cuda13x", extra = ["ctk"] },
+]
+
 [package.dev-dependencies]
 dev = [
-    { name = "cupy-cuda13x" },
     { name = "ipykernel" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "cupy-cuda13x", extras = ["ctk"], specifier = ">=14.2.0" },
+    { name = "cupy-cuda13x", extras = ["ctk"], marker = "extra == 'gpu'", specifier = ">=14.2.0" },
     { name = "matplotlib", specifier = ">=3.11.1" },
     { name = "numpy", specifier = ">=2.5.3" },
 ]
+provides-extras = ["gpu"]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "cupy-cuda13x", specifier = ">=14.2.0" },
-    { name = "ipykernel", specifier = ">=7.3.0" },
-]
+dev = [{ name = "ipykernel", specifier = ">=7.3.0" }]
 
 [[package]]
 name = "stack-data"
