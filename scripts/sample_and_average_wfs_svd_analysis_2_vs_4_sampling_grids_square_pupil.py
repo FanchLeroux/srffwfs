@@ -16,9 +16,9 @@ from srffwfs.config import Config
 
 config = Config()
 
-n_sampling_points = 8
+n_sampling_points = 10
 extra_sampling_factor = (
-    16  # detector pixel shape is (extra_sampling_factor, extra_sampling_factor)
+    4  # detector pixel shape is (extra_sampling_factor, extra_sampling_factor)
 )
 
 shift_x = extra_sampling_factor // 2  # half pixel shift in x
@@ -28,9 +28,6 @@ pupil = np.ones((n_px, n_px), dtype=bool)
 
 labels = get_labels(int(n_sampling_points), remove_piston=True)
 labels_sr = get_labels(int(2 * n_sampling_points), remove_piston=True)
-
-fig, ax = draw_labels(labels)
-fig_sr, ax_sr = draw_labels(labels_sr)
 
 fourier_basis_g1 = compute_fourier_basis(
     n_px,
@@ -213,21 +210,17 @@ axs[1, 0].set_title("Singular Values - Binned Fourier Basis 3")
 axs[1, 1].semilogy(s_g4, marker="+")
 axs[1, 1].set_title("Singular Values - Binned Fourier Basis 4")
 
-fig = plt.figure()
-plt.semilogy(s_all_g, marker="+")
-plt.title("Singular Values - Binned Fourier Basis All")
+fig, axs = plt.subplots(2, 2, constrained_layout=True)
 
-fig = plt.figure()
-plt.semilogy(s_g1_g2, marker="+")
-plt.title("Singular Values - Binned Fourier Basis Grids 1 and 2")
+axs[1, 1].semilogy(s_all_g, marker="+", label="All grids")
+axs[0, 0].semilogy(s_g1_g2, marker="+", label="Grids 1 and 2")
+axs[0, 1].semilogy(s_g1_g3, marker="+", label="Grids 1 and 3")
+axs[1, 0].semilogy(s_g1_g4, marker="+", label="Grids 1 and 4")
 
-fig = plt.figure()
-plt.semilogy(s_g1_g3, marker="+")
-plt.title("Singular Values - Binned Fourier Basis Grids 1 and 3")
-
-fig = plt.figure()
-plt.semilogy(s_g1_g4, marker="+")
-plt.title("Singular Values - Binned Fourier Basis Grids 1 and 4")
+for ax in axs.flatten():
+    ax.set_xlabel("Singular value index")
+    ax.set_ylabel("Singular value")
+    ax.legend(loc="lower left")
 
 # %%
 
@@ -273,11 +266,6 @@ axs[2].set_title(f"Eigenmode {eigen_mode_index} - Binned Fourier Basis 2 Grids 3
 modes_weight_g1_g2 = (np.abs(vt_g1_g2[:n_modes_2g]) ** 2).sum(axis=0)
 first_modes_g1_g2 = np.argsort(modes_weight_g1_g2)[-n_modes_2g:][::-1]
 
-plt.figure()
-plt.plot(modes_weight_g1_g2)
-
-print(f"First {n_modes_2g} modes: {first_modes_g1_g2}")
-
 first_modes_g1_g2_labels = [labels_sr[i] for i in first_modes_g1_g2]
 
 # %%
@@ -285,20 +273,12 @@ first_modes_g1_g2_labels = [labels_sr[i] for i in first_modes_g1_g2]
 modes_weight_g1_g3 = (np.abs(vt_g1_g3[:n_modes_2g]) ** 2).sum(axis=0)
 first_modes_g1_g3 = np.argsort(modes_weight_g1_g3)[-n_modes_2g:][::-1]
 
-plt.figure()
-plt.plot(modes_weight_g1_g3)
-
-print(f"First {n_modes_2g} modes: {first_modes_g1_g3}")
-
 first_modes_g1_g3_labels = [labels_sr[i] for i in first_modes_g1_g3]
 
 # %%
 
 modes_weight_g1_g4 = (np.abs(vt_g1_g4[:n_modes_2g]) ** 2).sum(axis=0)
 first_modes_g1_g4 = np.argsort(modes_weight_g1_g4)[-n_modes_2g:][::-1]
-
-plt.figure()
-plt.plot(modes_weight_g1_g4)
 
 first_modes_g1_g4_labels = [labels_sr[i] for i in first_modes_g1_g4]
 
