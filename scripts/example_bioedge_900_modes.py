@@ -1,9 +1,4 @@
-# %% -*- coding: utf-8 -*-
-"""
-Created on Mon May 12 14:37:17 2025
-
-@author: fleroux
-"""
+# %% imports
 
 import pathlib
 from tqdm import tqdm
@@ -40,7 +35,7 @@ param = {}
 # fill the dictionary
 # ------------------ ATMOSPHERE ----------------- #
 
-param["r0"] = 0.15  # [m] value of r0 in the visibile
+param["r0"] = 0.15  # [m] value of r0 at 500 nm
 param["L0"] = 30  # [m] value of L0 in the visibile
 param["fractionnal_r0"] = [0.45, 0.1, 0.1, 0.25, 0.1]  # Cn2 profile (percentage)
 param["wind_speed"] = [5, 4, 8, 10, 2]  # [m.s-1] wind speed of  layers
@@ -81,8 +76,6 @@ param["n_actuator"] = 2 * param["n_subaperture"]  # number of actuators
 # ----------------------- WFS ---------------------- #
 
 param["modulation"] = 5.0  # [lambda/D] modulation radius or half grey width
-param["grey_length"] = param["modulation"]  # [lambda/D] grey length in case of
-# small grey bioedge WFS
 param["n_pix_separation"] = 10  # [pixel] separation ratio between the pupils
 param["psf_centering"] = False  # centering of the FFT and of the mask on
 # the 4 central pixels
@@ -121,25 +114,15 @@ param["compute_M2C_Folder"] = str(pathlib.Path(__file__).parent)
 
 # ----------------------- RECONSTRUCTION ------------------------ #
 
-param["mmse_noise_level_guess_slopes_maps"] = (
-    10e-9  # noise level assumption for MMSE reconstruction
-)
-param["mmse_noise_level_guess_full_frame"] = (
-    5e-11  # noise level assumption for MMSE full frame reconstruction
-)
-param["mmse_alpha"] = (
-    1.0  # Weight for the turbulence statistics for MMSE reconstruction
-)
+param["n_modes_to_show_lse_sr"] = 900
 
 # -------------------- LOOP ----------------------- #
 
-param["n_modes_to_show_lse_sr"] = 900
-
-param["loop_gain"] = 0.5
+param["loop_gain"] = 0.7
 
 param["n_iter"] = 200
 
-param["delay"] = 2
+param["delay"] = 1
 
 # --------------------- FILENAME -------------------- #
 
@@ -263,11 +246,25 @@ calib_sr = InteractionMatrix(
     display=True,
 )
 
-# %% LSE Reconstructor computation
+# %% LSE Reconstructor computation - KL truncation
 
 R = np.linalg.pinv(calib_sr.D[:, : param["n_modes_to_show_lse_sr"]])
 
 reconstructor_lse_sr = M2C[:, : param["n_modes_to_show_lse_sr"]] @ R
+
+# %% LSE Reconstructor computation - SVD truncation - tbd
+
+# n_modes = param["n_modes_to_show_lse_sr"]
+
+# U, s, Vh = np.linalg.svd(calib_sr.D, full_matrices=False)
+
+# U_trunc = U[:, :n_modes]
+# s_trunc = s[:n_modes]
+# Vh_trunc = Vh[:n_modes, :]
+
+# R = (Vh_trunc.T / s_trunc) @ U_trunc.T
+
+# reconstructor_lse_sr = M2C[:, : param["n_modes_to_show_lse_sr"]] @ R
 
 # %% SEED
 
@@ -347,3 +344,5 @@ plt.title("long_exposure_psf_lse_sr")
 plt.savefig(fig_dir / pathlib.Path("long_exposure_psf" + ".png"), bbox_inches="tight")
 
 plt.show()
+
+# %%
