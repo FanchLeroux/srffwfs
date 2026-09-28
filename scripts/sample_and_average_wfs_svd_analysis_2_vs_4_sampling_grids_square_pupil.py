@@ -4,7 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from srffwfs.fourier_basis import (
-    draw_labels,
     draw_multiple_labels,
     get_labels,
     compute_fourier_basis,
