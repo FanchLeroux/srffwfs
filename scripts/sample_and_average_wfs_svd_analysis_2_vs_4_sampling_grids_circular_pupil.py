@@ -9,6 +9,7 @@ from srffwfs.fourier_basis import (
     get_labels,
     compute_fourier_basis,
 )
+from srffwfs.miscellaneous import get_circular_pupil
 from srffwfs.binning import bin_2d
 from srffwfs.config import Config
 
@@ -24,7 +25,7 @@ extra_sampling_factor = (
 shift_x = extra_sampling_factor // 2  # half pixel shift in x
 shift_y = extra_sampling_factor // 2  # half pixel shift in y
 n_px = extra_sampling_factor * n_sampling_points
-pupil = np.ones((n_px, n_px), dtype=bool)
+pupil = get_circular_pupil(n_px)
 
 labels = get_labels(int(n_sampling_points), remove_piston=True)
 labels_sr = get_labels(int(2 * n_sampling_points), remove_piston=True)
@@ -42,7 +43,7 @@ fourier_basis_g2 = compute_fourier_basis(
     n_px,
     labels=labels_sr,
     remove_piston=True,
-    pupil_mask=None,
+    pupil_mask=pupil,
     return_labels=False,
     shift_x=shift_x,
     shift_y=0.0,
@@ -51,7 +52,7 @@ fourier_basis_g3 = compute_fourier_basis(
     n_px,
     labels=labels_sr,
     remove_piston=True,
-    pupil_mask=None,
+    pupil_mask=pupil,
     return_labels=False,
     shift_x=0.0,
     shift_y=shift_y,
@@ -60,7 +61,7 @@ fourier_basis_g4 = compute_fourier_basis(
     n_px,
     labels=labels_sr,
     remove_piston=True,
-    pupil_mask=None,
+    pupil_mask=pupil,
     return_labels=False,
     shift_x=shift_x,
     shift_y=shift_y,
@@ -254,11 +255,11 @@ eigen_modes_g1_g4 = eigen_modes_g1_g4_flat.T.reshape(fourier_basis_g1.shape)
 
 fig, axs = plt.subplots(1, 3, constrained_layout=True)
 axs[0].imshow(eigen_modes_g1_g2[eigen_mode_index])
-axs[0].set_title(f"Eigenmode {eigen_mode_index} - Binned Fourier Basis 2 Grids 1")
+axs[0].set_title(f"Eigenmode {eigen_mode_index}\ngrids 1 and 2")
 axs[1].imshow(eigen_modes_g1_g3[eigen_mode_index])
-axs[1].set_title(f"Eigenmode {eigen_mode_index} - Binned Fourier Basis 2 Grids 2")
+axs[1].set_title(f"Eigenmode {eigen_mode_index}\ngrids 1 and 3")
 axs[2].imshow(eigen_modes_g1_g4[eigen_mode_index])
-axs[2].set_title(f"Eigenmode {eigen_mode_index} - Binned Fourier Basis 2 Grids 3")
+axs[2].set_title(f"Eigenmode {eigen_mode_index}\ngrids 1 and 4")
 
 # %%
 

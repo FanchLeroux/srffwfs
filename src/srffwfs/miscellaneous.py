@@ -1,6 +1,16 @@
 import numpy as np
 
 
+def get_circular_pupil(npx):
+    D = npx + 1
+    x = np.linspace(-npx / 2, npx / 2, npx)
+    xx, yy = np.meshgrid(x, x)
+    circle = xx**2 + yy**2
+    pupil = circle < (D / 2) ** 2
+
+    return pupil
+
+
 def pad_array(array: np.ndarray, factor: int) -> np.ndarray:
     """
     Pad an array with zeros on all sides by a given factor.
