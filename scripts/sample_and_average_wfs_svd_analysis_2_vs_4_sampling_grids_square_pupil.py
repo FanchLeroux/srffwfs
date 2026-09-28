@@ -213,23 +213,21 @@ axs[1, 0].set_title("Singular Values - Binned Fourier Basis 3")
 axs[1, 1].semilogy(s_g4, marker="+")
 axs[1, 1].set_title("Singular Values - Binned Fourier Basis 4")
 
-# fig.savefig("singular_values_binned_fourier_basis_1_2_3_4.svg", dpi=300)
-
 fig = plt.figure()
 plt.semilogy(s_all_g, marker="+")
 plt.title("Singular Values - Binned Fourier Basis All")
 
 fig = plt.figure()
 plt.semilogy(s_g1_g2, marker="+")
-plt.title("Singular Values - Binned Fourier Basis 2 Grids 1")
+plt.title("Singular Values - Binned Fourier Basis Grids 1 and 2")
 
 fig = plt.figure()
 plt.semilogy(s_g1_g3, marker="+")
-plt.title("Singular Values - Binned Fourier Basis 2 Grids 2")
+plt.title("Singular Values - Binned Fourier Basis Grids 1 and 3")
 
 fig = plt.figure()
 plt.semilogy(s_g1_g4, marker="+")
-plt.title("Singular Values - Binned Fourier Basis 2 Grids 3")
+plt.title("Singular Values - Binned Fourier Basis Grids 1 and 4")
 
 # %%
 
@@ -281,8 +279,6 @@ plt.plot(modes_weight_g1_g2)
 print(f"First {n_modes_2g} modes: {first_modes_g1_g2}")
 
 first_modes_g1_g2_labels = [labels_sr[i] for i in first_modes_g1_g2]
-draw_labels(labels_sr)
-draw_labels(first_modes_g1_g2_labels)
 
 # %%
 
@@ -295,8 +291,6 @@ plt.plot(modes_weight_g1_g3)
 print(f"First {n_modes_2g} modes: {first_modes_g1_g3}")
 
 first_modes_g1_g3_labels = [labels_sr[i] for i in first_modes_g1_g3]
-draw_labels(labels_sr)
-draw_labels(first_modes_g1_g3_labels)
 
 # %%
 
@@ -306,35 +300,9 @@ first_modes_g1_g4 = np.argsort(modes_weight_g1_g4)[-n_modes_2g:][::-1]
 plt.figure()
 plt.plot(modes_weight_g1_g4)
 
-print(f"First {n_modes_2g} modes: {first_modes_g1_g4}")
-
 first_modes_g1_g4_labels = [labels_sr[i] for i in first_modes_g1_g4]
-draw_labels(labels_sr)
-draw_labels(first_modes_g1_g4_labels)
 
 # %%
-
-fig, ax_all = draw_labels(labels_sr, plot_hermitian=True)
-fig, ax_1 = draw_labels(first_modes_g1_g2_labels, plot_hermitian=True)
-fig, ax_2 = draw_labels(first_modes_g1_g3_labels, plot_hermitian=True)
-fig, ax_3 = draw_labels(first_modes_g1_g4_labels, plot_hermitian=True)
-
-draw_multiple_labels(
-    [
-        labels_sr,
-        first_modes_g1_g2_labels,
-        first_modes_g1_g3_labels,
-        first_modes_g1_g4_labels,
-    ],
-    titles=[
-        "All modes",
-        "First modes\nBinned Fourier Basis 2 Grids 1 and 2",
-        "First modes\nBinned Fourier Basis 2 Grids 1 and 3",
-        "First modes\nBinned Fourier Basis 2 Grids 1 and 4",
-    ],
-    plot_hermitian=True,
-    ncols=2,
-)
 
 fig, axs = draw_multiple_labels(
     [
