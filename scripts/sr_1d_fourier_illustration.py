@@ -157,3 +157,5 @@ fig2.savefig(
     pad_inches=0.01,
     dpi=300,
 )
+
+plt.show()
