@@ -10,10 +10,13 @@ from srffwfs.fourier_basis import (
     compute_fourier_basis,
 )
 from srffwfs.binning import bin_2d
+from srffwfs.config import Config
 
 # %%
 
-n_sampling_points = 16
+config = Config()
+
+n_sampling_points = 8
 extra_sampling_factor = (
     16  # detector pixel shape is (extra_sampling_factor, extra_sampling_factor)
 )
@@ -21,6 +24,7 @@ extra_sampling_factor = (
 shift_x = extra_sampling_factor // 2  # half pixel shift in x
 shift_y = extra_sampling_factor // 2  # half pixel shift in y
 n_px = extra_sampling_factor * n_sampling_points
+pupil = np.ones((n_px, n_px), dtype=bool)
 
 labels = get_labels(int(n_sampling_points), remove_piston=True)
 labels_sr = get_labels(int(2 * n_sampling_points), remove_piston=True)
@@ -32,7 +36,7 @@ fourier_basis_g1 = compute_fourier_basis(
     n_px,
     labels=labels_sr,
     remove_piston=True,
-    pupil_mask=None,
+    pupil_mask=pupil,
     return_labels=False,
     shift_x=0.0,
     shift_y=0.0,
@@ -227,8 +231,6 @@ fig = plt.figure()
 plt.semilogy(s_g1_g4, marker="+")
 plt.title("Singular Values - Binned Fourier Basis 2 Grids 3")
 
-plt.show()
-
 # %%
 
 fig, axs = plt.subplots(2, 2, constrained_layout=True)
@@ -333,3 +335,24 @@ draw_multiple_labels(
     plot_hermitian=True,
     ncols=2,
 )
+
+fig, axs = draw_multiple_labels(
+    [
+        labels_sr,
+        first_modes_g1_g2_labels,
+        first_modes_g1_g3_labels,
+        first_modes_g1_g4_labels,
+    ],
+    titles=[
+        "All modes",
+        "First modes\nBinned Fourier Basis Grids 1 and 2",
+        "First modes\nBinned Fourier Basis Grids 1 and 3",
+        "First modes\nBinned Fourier Basis Grids 1 and 4",
+    ],
+    plot_hermitian=True,
+    ncols=2,
+)
+
+fig.savefig(config.root_dir / "outputs" / "dominant_fourier_modes_2_grids.svg")
+
+plt.show()
