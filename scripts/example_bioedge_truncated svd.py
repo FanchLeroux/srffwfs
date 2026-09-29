@@ -1,7 +1,7 @@
 # %% imports
 
 import pathlib
-from tqdm import tqdm
+from functools import lru_cache
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,6 +21,40 @@ from OOPAO.calibration.InteractionMatrix import InteractionMatrix
 
 from srffwfs.closed_loop import close_the_loop
 
+# %% functions definitions
+
+
+@lru_cache(maxsize=None)
+def compute_KL_basis(tel, atm, dm):
+
+    M2C_KL_full, HHt, PSD_atm, df = compute_M2C(
+        telescope=tel,
+        atmosphere=atm,
+        deformableMirror=dm,
+        param=None,
+        nameFolder=None,
+        remove_piston=False,
+        HHtName="KL_covariance_matrix",
+        baseName="KL_basis",
+        mem_available=6.1e9,
+        minimF=False,
+        nmo=None,
+        ortho_spm=True,
+        SZ=np.int64(2 * tel.OPD.shape[0]),
+        nZer=3,
+        NDIVL=1,
+        lim_inversion=1e-16,
+        returnHHt_PSD_df=True,
+        save_output=False,
+    )
+
+    M2C = M2C_KL_full[:, 1:]  # remove piston
+
+    dm.coefs = np.zeros(dm.nValidAct)  # reset dm.OPD
+
+    return M2C
+
+
 # %%
 
 config = Config()
@@ -33,9 +67,17 @@ fig_dir = config.root_dir / "outputs"
 param = {}
 
 # fill the dictionary
+
+# ---------------------- NGS ---------------------- #
+
+# phot.R4 = [0.670e-6, 0.300e-6, 7.66e12]
+wavelength = 670e-9  # [m] wavelength of the guide star
+param["optical_band"] = "R4"  # optical band of the guide star
+param["magnitude"] = 8  # magnitude of the guide star
+
 # ------------------ ATMOSPHERE ----------------- #
 
-param["r0"] = 0.15  # [m] value of r0 at 500 nm
+param["r0"] = 0.1  # [m] value of r0 at 500 nm
 param["L0"] = 30  # [m] value of L0 in the visibile
 param["fractionnal_r0"] = [0.45, 0.1, 0.1, 0.25, 0.1]  # Cn2 profile (percentage)
 param["wind_speed"] = [5, 4, 8, 10, 2]  # [m.s-1] wind speed of  layers
@@ -45,7 +87,7 @@ param["seeds"] = range(1)
 
 # ------------------- TELESCOPE ------------------ #
 
-param["diameter"] = 8  # [m] telescope diameter
+param["diameter"] = 2  # [m] telescope diameter
 param["n_subaperture"] = 20  # number of WFS subaperture along the
 # telescope diameter
 # [pixel] sampling of the WFS subapertures
@@ -62,20 +104,13 @@ param["sampling_time"] = 1 / 1000  # [s] loop sampling time
 param["centralObstruction"] = 0  # central obstruction in percentage
 # of the diameter
 
-# ---------------------- NGS ---------------------- #
-
-param["magnitude"] = 8  # magnitude of the guide star
-
-# phot.R4 = [0.670e-6, 0.300e-6, 7.66e12]
-param["optical_band"] = "R4"  # optical band of the guide star
-
 # ------------------------ DM --------------------- #
 
 param["n_actuator"] = 2 * param["n_subaperture"]  # number of actuators
 
 # ----------------------- WFS ---------------------- #
 
-param["modulation"] = 5.0  # [lambda/D] modulation radius or half grey width
+param["modulation"] = 2.0  # [lambda/D] modulation radius or half grey width
 param["n_pix_separation"] = 10  # [pixel] separation ratio between the pupils
 param["psf_centering"] = False  # centering of the FFT and of the mask on
 # the 4 central pixels
@@ -108,7 +143,8 @@ param["pupil_shift_bioedge"] = [
 
 param["modal_basis"] = "KL"
 # [m] actuator stroke for interaction matrix computation
-param["stroke"] = 1e-9
+stroke_rad = 0.01  # [rad]
+param["stroke"] = stroke_rad * wavelength / (2 * np.pi)  # [nm]
 param["single_pass"] = False  # push-pull or push only for the calibration
 param["compute_M2C_Folder"] = str(pathlib.Path(__file__).parent)
 
@@ -185,31 +221,7 @@ dm = DeformableMirror(tel, nSubap=param["n_actuator"])
 # %% ------------------------- MODAL BASIS -------------------------------
 
 if param["modal_basis"] == "KL":
-
-    M2C_KL_full, HHt, PSD_atm, df = compute_M2C(
-        telescope=tel,
-        atmosphere=atm,
-        deformableMirror=dm,
-        param=param,
-        nameFolder=param["compute_M2C_Folder"],
-        remove_piston=False,
-        HHtName="KL_covariance_matrix",
-        baseName="KL_basis",
-        mem_available=6.1e9,
-        minimF=False,
-        nmo=None,
-        ortho_spm=True,
-        SZ=np.int64(2 * tel.OPD.shape[0]),
-        nZer=3,
-        NDIVL=1,
-        lim_inversion=1e-16,
-        returnHHt_PSD_df=True,
-        save_output=False,
-    )
-
-    M2C = M2C_KL_full[:, 1:]  # remove piston
-
-    dm.coefs = np.zeros(dm.nValidAct)  # reset dm.OPD
+    M2C = compute_KL_basis(tel, atm, dm)
 
 elif param["modal_basis"] == "poke":
     M2C = np.identity(dm.nValidAct)
@@ -246,25 +258,62 @@ calib_sr = InteractionMatrix(
     display=True,
 )
 
+# %% SVD
+
+u, s, vt = np.linalg.svd(calib_sr.D, full_matrices=False)
+
+plt.figure()
+plt.plot(s, label=f"cond: {s[0]/s[-1]:.2e}")
+plt.yscale("log")
+plt.title("Singular values of the interaction matrix")
+plt.xlabel("# eigen mode")
+plt.ylabel("Singular values [a.u.]")
+plt.legend(loc="upper right")
+
+# %% extract eigen modes
+
+influence_functions_2d = dm.modes.T.reshape(
+    dm.nValidAct, tel.OPD.shape[0], tel.OPD.shape[1]
+)
+influence_functions_flat = influence_functions_2d[:, tel.pupil].T
+
+calibration_basis_flat = influence_functions_flat @ M2C
+calibration_basis_2d = np.zeros((M2C.shape[1], tel.OPD.shape[0], tel.OPD.shape[1]))
+calibration_basis_2d[:, tel.pupil] = calibration_basis_flat.T
+
+eigen_modes_flat = calibration_basis_flat @ vt.T
+eigen_modes_2d = np.zeros((vt.shape[0], tel.OPD.shape[0], tel.OPD.shape[1]))
+eigen_modes_2d[:, tel.pupil] = eigen_modes_flat.T
+
+# %% show eigen modes
+
+eigenmodes_indices = [0, 100, 1000, -1]
+
+fig_eigen_modes, axes_eigen_modes = plt.subplots(2, 2, constrained_layout=True)
+axes_eigen_modes[0, 0].imshow(eigen_modes_2d[eigenmodes_indices[0]])
+axes_eigen_modes[0, 0].set_title(f"Eigen mode {eigenmodes_indices[0]}")
+axes_eigen_modes[0, 1].imshow(eigen_modes_2d[eigenmodes_indices[1]])
+axes_eigen_modes[0, 1].set_title(f"Eigen mode {eigenmodes_indices[1]}")
+axes_eigen_modes[1, 0].imshow(eigen_modes_2d[eigenmodes_indices[2]])
+axes_eigen_modes[1, 0].set_title(f"Eigen mode {eigenmodes_indices[2]}")
+axes_eigen_modes[1, 1].imshow(eigen_modes_2d[eigenmodes_indices[3]])
+axes_eigen_modes[1, 1].set_title(f"Eigen mode {eigenmodes_indices[3]}")
+fig_eigen_modes.suptitle(
+    "Eigen modes of the interaction matrix\n"
+    rf"grey width: {param['modulation']} $\lambda/D$"
+)
+
 # %% LSE Reconstructor computation - KL truncation
 
-R = np.linalg.pinv(calib_sr.D[:, : param["n_modes_to_show_lse_sr"]])
+# R = np.linalg.pinv(calib_sr.D[:, : param["n_modes_to_show_lse_sr"]])
 
-reconstructor_lse_sr = M2C[:, : param["n_modes_to_show_lse_sr"]] @ R
+# reconstructor_lse_sr = M2C[:, : param["n_modes_to_show_lse_sr"]] @ R
 
 # %% LSE Reconstructor computation - SVD truncation - tbd
 
-# n_modes = param["n_modes_to_show_lse_sr"]
+n_modes = param["n_modes_to_show_lse_sr"]
 
-# U, s, Vh = np.linalg.svd(calib_sr.D, full_matrices=False)
-
-# U_trunc = U[:, :n_modes]
-# s_trunc = s[:n_modes]
-# Vh_trunc = Vh[:n_modes, :]
-
-# R = (Vh_trunc.T / s_trunc) @ U_trunc.T
-
-# reconstructor_lse_sr = M2C[:, : param["n_modes_to_show_lse_sr"]] @ R
+u, s, vt = np.linalg.svd(calib_sr.D, full_matrices=False)
 
 # %% SEED
 
