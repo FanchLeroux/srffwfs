@@ -252,6 +252,20 @@ R = np.linalg.pinv(calib_sr.D[:, : param["n_modes_to_show_lse_sr"]])
 
 reconstructor_lse_sr = M2C[:, : param["n_modes_to_show_lse_sr"]] @ R
 
+# %% LSE Reconstructor computation - SVD truncation - tbd
+
+# n_modes = param["n_modes_to_show_lse_sr"]
+
+# U, s, Vh = np.linalg.svd(calib_sr.D, full_matrices=False)
+
+# U_trunc = U[:, :n_modes]
+# s_trunc = s[:n_modes]
+# Vh_trunc = Vh[:n_modes, :]
+
+# R = (Vh_trunc.T / s_trunc) @ U_trunc.T
+
+# reconstructor_lse_sr = M2C[:, : param["n_modes_to_show_lse_sr"]] @ R
+
 # %% SEED
 
 seed = 12  # seed for atmosphere computation
