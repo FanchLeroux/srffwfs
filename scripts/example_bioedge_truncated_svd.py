@@ -20,6 +20,7 @@ from OOPAO.BioEdge import BioEdge
 from OOPAO.calibration.InteractionMatrix import InteractionMatrix
 
 from srffwfs.sensitivity import compute_photon_noise_sensitivity
+from srffwfs.compute_control_basis import compute_eigen_control_basis
 from srffwfs.closed_loop import close_the_loop
 
 # %% functions definitions
@@ -257,7 +258,7 @@ gbioedge_sr.apply_shift_wfs(
 )
 gbioedge_sr.modulation = 0.0  # update reference intensities etc.
 
-# %% Calibration
+# %% calibration
 
 calib_sr = InteractionMatrix(
     ngs,
@@ -271,9 +272,11 @@ calib_sr = InteractionMatrix(
     display=True,
 )
 
+interaction_matrix = calib_sr.D
+
 # %% sensitivity analysis - allows low order mode cutoff identification
 
-interaction_matrix_rad_normalized = calib_sr.D * wavelength / (2 * np.pi)
+interaction_matrix_rad_normalized = interaction_matrix * wavelength / (2 * np.pi)
 reference_intensities = gbioedge_sr.referenceSignal
 
 photon_noise_sensitivity = compute_photon_noise_sensitivity(
@@ -291,22 +294,61 @@ ax_sensitivity.legend(loc="lower left")
 
 # %% compute controll basis using SVD eigenmodes while keeping low order modes
 
+n_lo_modes_to_keep = 100
 
-# %% LSE Reconstructor computation - KL truncation
-
-reconstructor_lse_sr = np.linalg.pinv(calib_sr.D[:, : param["n_modes_to_show_lse_sr"]])
-reconstructor_lse_sr = np.concatenate(
-    [
-        reconstructor_lse_sr,
-        np.zeros(
-            (
-                calib_sr.D.shape[1] - reconstructor_lse_sr.shape[0],
-                reconstructor_lse_sr.shape[1],
-            )
-        ),
-    ],
-    axis=0,
+full_eigen_control_basis = compute_eigen_control_basis(
+    calibration_basis, interaction_matrix, n_lo_modes_to_keep
 )
+
+eigen_control_basis = full_eigen_control_basis[:, : param["n_modes_to_show_lse_sr"]]
+
+# %% Modal dm eigen basis
+
+eigen_modal_dm = DeformableMirror(
+    tel, nSubap=param["n_actuator"], modes=eigen_control_basis
+)
+
+# %% calibration with eigen control basis
+
+calib_sr_eigen_basis = InteractionMatrix(
+    ngs,
+    tel,
+    eigen_modal_dm,
+    gbioedge_sr,
+    M2C=np.diag(np.ones(eigen_modal_dm.nValidAct)),
+    stroke=param["stroke"],
+    single_pass=param["single_pass"],
+    noise="off",
+    display=True,
+)
+
+interaction_matrix_eigen_basis = calib_sr_eigen_basis.D
+
+
+# %% sensitivity analysis - eigen control basis
+
+interaction_matrix_eigen_basis_rad_normalized = (
+    interaction_matrix_eigen_basis * wavelength / (2 * np.pi)
+)
+reference_intensities = gbioedge_sr.referenceSignal
+
+photon_noise_sensitivity_eigen_basis = compute_photon_noise_sensitivity(
+    interaction_matrix_eigen_basis_rad_normalized, reference_intensities
+)
+
+fig_sensitivity, ax_sensitivity = plt.subplots()
+ax_sensitivity.plot(photon_noise_sensitivity_eigen_basis)
+ax_sensitivity.axhline(y=2**0.5, color="k", linestyle="--", label=r"$\sqrt{2}$")
+ax_sensitivity.set_xlabel("# mode")
+ax_sensitivity.set_ylabel(r"S_{ph}")
+ax_sensitivity.set_xscale("log")
+ax_sensitivity.set_yscale("log")
+ax_sensitivity.legend(loc="lower left")
+ax_sensitivity.set_title("eigen control basis sensitivity analysis")
+
+# %% LSE Reconstructor computation - eigen control basis
+
+reconstructor_lse_sr = np.linalg.pinv(interaction_matrix_eigen_basis)
 
 # %% SEED
 
@@ -328,7 +370,7 @@ seed = 12  # seed for atmosphere computation
     tel,
     ngs,
     atm,
-    first_calibration_modal_dm,
+    eigen_modal_dm,
     gbioedge_sr,
     reconstructor_lse_sr,
     param["loop_gain"],
