@@ -271,7 +271,7 @@ calib_sr = InteractionMatrix(
     display=True,
 )
 
-# %% Sensitivity analysis
+# %% sensitivity analysis - allows low order mode cutoff identification
 
 interaction_matrix_rad_normalized = calib_sr.D * wavelength / (2 * np.pi)
 reference_intensities = gbioedge_sr.referenceSignal
@@ -289,90 +289,24 @@ ax_sensitivity.set_xscale("log")
 ax_sensitivity.set_yscale("log")
 ax_sensitivity.legend(loc="lower left")
 
-
-# %% SVD
-
-u, s, vt = np.linalg.svd(calib_sr.D, full_matrices=False)
-
-plt.figure()
-plt.plot(s, label=f"cond: {s[0]/s[-1]:.2e}")
-plt.yscale("log")
-plt.title("Singular values of the interaction matrix")
-plt.xlabel("# eigen mode")
-plt.ylabel("Singular values [a.u.]")
-plt.legend(loc="upper right")
-
-
-# %% show eigen modes
-
-eigenmodes_indices = [0, 100, 1000, -1]
-
-fig_eigen_modes, axes_eigen_modes = plt.subplots(2, 2, constrained_layout=True)
-axes_eigen_modes[0, 0].imshow(eigen_modes_2d[eigenmodes_indices[0]])
-axes_eigen_modes[0, 0].set_title(f"Eigen mode {eigenmodes_indices[0]}")
-axes_eigen_modes[0, 1].imshow(eigen_modes_2d[eigenmodes_indices[1]])
-axes_eigen_modes[0, 1].set_title(f"Eigen mode {eigenmodes_indices[1]}")
-axes_eigen_modes[1, 0].imshow(eigen_modes_2d[eigenmodes_indices[2]])
-axes_eigen_modes[1, 0].set_title(f"Eigen mode {eigenmodes_indices[2]}")
-axes_eigen_modes[1, 1].imshow(eigen_modes_2d[eigenmodes_indices[3]])
-axes_eigen_modes[1, 1].set_title(f"Eigen mode {eigenmodes_indices[3]}")
-fig_eigen_modes.suptitle(
-    "Eigen modes of the interaction matrix\n"
-    rf"grey width: {param['modulation']} $\lambda/D$"
-)
-
 # %% compute controll basis using SVD eigenmodes while keeping low order modes
 
-n_modes_to_keep = 100  # number of low order modes to keep in the final control basis
-
-calibration_basis_flat_ho = calibration_basis_flat[:, n_modes_to_keep:]
-interaction_matrix_flat_ho = calib_sr.D[:, n_modes_to_keep:]
-
-u_ho, s_ho, vt_ho = np.linalg.svd(interaction_matrix_flat_ho, full_matrices=False)
-
-eigen_modes_flat_ho = calibration_basis_flat_ho @ vt_ho.T
-eigen_modes_2d_ho = np.zeros((vt_ho.shape[0], tel.OPD.shape[0], tel.OPD.shape[1]))
-eigen_modes_2d_ho[:, tel.pupil] = eigen_modes_flat_ho.T
-
-# %% show eigen modes ho
-
-eigenmodes_indices_ho = [0, 100, 1000, -1]
-
-fig_eigen_modes_ho, axes_eigen_modes_ho = plt.subplots(2, 2, constrained_layout=True)
-axes_eigen_modes_ho[0, 0].imshow(eigen_modes_2d_ho[eigenmodes_indices_ho[0]])
-axes_eigen_modes_ho[0, 0].set_title(f"Eigen mode {eigenmodes_indices_ho[0]}")
-axes_eigen_modes_ho[0, 1].imshow(eigen_modes_2d_ho[eigenmodes_indices_ho[1]])
-axes_eigen_modes_ho[0, 1].set_title(f"Eigen mode {eigenmodes_indices_ho[1]}")
-axes_eigen_modes_ho[1, 0].imshow(eigen_modes_2d_ho[eigenmodes_indices_ho[2]])
-axes_eigen_modes_ho[1, 0].set_title(f"Eigen mode {eigenmodes_indices_ho[2]}")
-axes_eigen_modes_ho[1, 1].imshow(eigen_modes_2d_ho[eigenmodes_indices_ho[3]])
-axes_eigen_modes_ho[1, 1].set_title(f"Eigen mode {eigenmodes_indices_ho[3]}")
-fig_eigen_modes_ho.suptitle(
-    "Eigen modes ho of the interaction matrix\n"
-    rf"grey width: {param['modulation']} $\lambda/D$"
-    rf"\nkeeping {n_modes_to_keep} low order modes in the final control basis"
-)
-
-# %% Final controll basis
-
-full_final_control_basis_2d = np.concatenate(
-    [
-        calibration_basis_2d[:n_modes_to_keep, :, :],
-        eigen_modes_2d_ho,
-    ],
-    axis=0,
-)
-
-final_control_basis_2d = full_final_control_basis_2d[
-    : param["n_modes_to_show_lse_sr"], :, :
-]
-
-final_control_basis_flat = final_control_basis_2d[:, tel.pupil].T
 
 # %% LSE Reconstructor computation - KL truncation
 
-R = np.linalg.pinv(calib_sr.D[:, : param["n_modes_to_show_lse_sr"]])
-reconstructor_lse_sr = M2C[:, : param["n_modes_to_show_lse_sr"]] @ R
+reconstructor_lse_sr = np.linalg.pinv(calib_sr.D[:, : param["n_modes_to_show_lse_sr"]])
+reconstructor_lse_sr = np.concatenate(
+    [
+        reconstructor_lse_sr,
+        np.zeros(
+            (
+                calib_sr.D.shape[1] - reconstructor_lse_sr.shape[0],
+                reconstructor_lse_sr.shape[1],
+            )
+        ),
+    ],
+    axis=0,
+)
 
 # %% SEED
 
@@ -394,7 +328,7 @@ seed = 12  # seed for atmosphere computation
     tel,
     ngs,
     atm,
-    dm,
+    first_calibration_modal_dm,
     gbioedge_sr,
     reconstructor_lse_sr,
     param["loop_gain"],
@@ -415,7 +349,7 @@ long_exposure_psf_lse_sr = np.sum(short_exposure_psf_lse_sr[:, :, 100:], axis=2)
 
 # noise propagation
 plt.figure()
-plt.plot(np.diag(R @ R.T) / gbioedge_sr.nSignal)
+plt.plot(np.diag(reconstructor_lse_sr @ reconstructor_lse_sr.T) / gbioedge_sr.nSignal)
 plt.yscale("log")
 plt.title("modal uniform noise propagation")
 plt.xlabel("# modes")
