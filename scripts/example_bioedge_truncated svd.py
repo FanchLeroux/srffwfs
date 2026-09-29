@@ -223,9 +223,21 @@ dm = DeformableMirror(tel, nSubap=param["n_actuator"])
 
 if param["modal_basis"] == "KL":
     M2C = compute_KL_basis(tel, atm, dm)
+    ngs**tel  # reset
 
 elif param["modal_basis"] == "poke":
     M2C = np.identity(dm.nValidAct)
+
+# %% extract calibration basis
+
+influence_functions = dm.modes
+calibration_basis = influence_functions @ M2C
+
+# %% -------------------------   Modal  DM   ----------------------------------
+
+first_calibration_modal_dm = DeformableMirror(
+    tel, nSubap=param["n_actuator"], modes=calibration_basis
+)
 
 # %% ----------------------- Grey Bi-O-Edge ---------------------------- #
 
@@ -250,9 +262,9 @@ gbioedge_sr.modulation = 0.0  # update reference intensities etc.
 calib_sr = InteractionMatrix(
     ngs,
     tel,
-    dm,
+    first_calibration_modal_dm,
     gbioedge_sr,
-    M2C=M2C,
+    M2C=np.diag(np.ones(first_calibration_modal_dm.nValidAct)),
     stroke=param["stroke"],
     single_pass=param["single_pass"],
     noise="off",
@@ -290,20 +302,6 @@ plt.xlabel("# eigen mode")
 plt.ylabel("Singular values [a.u.]")
 plt.legend(loc="upper right")
 
-# %% extract eigen modes
-
-influence_functions_2d = dm.modes.T.reshape(
-    dm.nValidAct, tel.OPD.shape[0], tel.OPD.shape[1]
-)
-influence_functions_flat = influence_functions_2d[:, tel.pupil].T
-
-calibration_basis_flat = influence_functions_flat @ M2C
-calibration_basis_2d = np.zeros((M2C.shape[1], tel.OPD.shape[0], tel.OPD.shape[1]))
-calibration_basis_2d[:, tel.pupil] = calibration_basis_flat.T
-
-eigen_modes_flat = calibration_basis_flat @ vt.T
-eigen_modes_2d = np.zeros((vt.shape[0], tel.OPD.shape[0], tel.OPD.shape[1]))
-eigen_modes_2d[:, tel.pupil] = eigen_modes_flat.T
 
 # %% show eigen modes
 
