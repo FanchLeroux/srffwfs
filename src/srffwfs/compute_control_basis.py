@@ -38,4 +38,4 @@ def compute_eigen_control_basis(
         axis=1,
     )
 
-    return control_basis
+    return control_basis, np.concatenate([np.full(n_lo_modes_to_keep, np.nan), s_ho])

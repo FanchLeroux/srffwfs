@@ -296,11 +296,21 @@ ax_sensitivity.legend(loc="lower left")
 
 n_lo_modes_to_keep = 100
 
-full_eigen_control_basis = compute_eigen_control_basis(
+full_eigen_control_basis, s_eigen_control_basis = compute_eigen_control_basis(
     calibration_basis, interaction_matrix, n_lo_modes_to_keep
 )
 
-eigen_control_basis = full_eigen_control_basis[:, : param["n_modes_to_show_lse_sr"]]
+plt.figure()
+plt.plot(s_eigen_control_basis)
+plt.title("Singular values of the eigen control basis")
+plt.xlabel("# mode")
+plt.ylabel("Singular value")
+plt.yscale("log")
+
+# %%
+
+n_controlled_modes = 900
+eigen_control_basis = full_eigen_control_basis[:, :n_controlled_modes]
 
 # %% Modal dm eigen basis
 
