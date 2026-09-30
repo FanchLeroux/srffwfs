@@ -1,6 +1,5 @@
 # %% imports
 
-from functools import lru_cache
 from copy import deepcopy
 
 import numpy as np
@@ -23,6 +22,7 @@ from srffwfs.modal_bases.KL_basis import compute_KL_basis
 from srffwfs.sensitivity import compute_photon_noise_sensitivity
 from srffwfs.compute_control_basis import compute_eigen_control_basis
 from srffwfs.closed_loop import close_the_loop
+from srffwfs.miscellaneous import pad_array, crop_array
 
 # %% outputs directory
 
@@ -40,7 +40,7 @@ magnitude = 8  # magnitude of the guide star
 
 # ------------------ ATMOSPHERE ----------------- #
 
-r0 = 0.35  # [m] value of r0 at 500 nm
+r0 = 0.1  # [m] value of r0 at 500 nm
 external_scale = 30  # [m] value of L0 in the visibile
 fractional_r0 = [0.45, 0.1, 0.1, 0.25, 0.1]  # Cn2 profile (percentage)
 wind_speed = [5, 4, 8, 10, 2]  # [m.s-1] wind speed of layers
@@ -66,12 +66,12 @@ n_actuator = 2 * n_subaperture  # number of actuators
 
 # ----------------------- WFS ---------------------- #
 
-modulation = 0.0  # [lambda/D] modulation radius or half grey width
+modulation = 2.0  # [lambda/D] modulation radius or half grey width
 n_pix_separation = 10  # [pixel] separation ratio between the pupils
 light_threshold = (
     0.3 if modulation > 0.0 else 0
 )  # light threshold to select the valid pixels
-detector_photon_noise = False
+detector_photon_noise = True
 detector_read_out_noise = 0.0  # e- RMS
 
 # super resolution
@@ -261,7 +261,7 @@ axs[1].set_title(f"Interaction matrix signal")
 axs[1].axis("off")
 
 
-# %% sensitivity analysis - allows low order mode cutoff identification
+# %% sensitivity analysis - allows low/high order mode cutoff identification
 
 interaction_matrix_rad_normalized = interaction_matrix * wavelength / (2 * np.pi)
 reference_intensities = pyramid_sr.referenceSignal
@@ -323,6 +323,47 @@ plt.legend()
 # %%
 
 eigen_control_basis = full_eigen_control_basis[:, :n_controlled_modes]
+
+# %% accessible fourier plane illustration attempt
+
+modal_cutoff = n_controlled_modes
+zero_padding_factor = 2
+
+pupil_padded = pad_array(tel.pupil, zero_padding_factor)
+pupil_plane_field = np.zeros(
+    zero_padding_factor * np.array(tel.pupil.shape), dtype=complex
+)
+focal_plane_irradiance = np.zeros(zero_padding_factor * np.array(tel.pupil.shape))
+
+pupil_fields = np.zeros(
+    (*pupil_plane_field.shape, modal_cutoff),
+    dtype=full_eigen_control_basis.dtype,
+)
+
+pupil_fields[pupil_padded, :] = full_eigen_control_basis[
+    tel.pupil.reshape(-1),
+    :modal_cutoff,
+]
+
+focal_plane_irradiance = np.sum(
+    np.abs(
+        np.fft.fftshift(
+            np.fft.fft2(pupil_fields, axes=(0, 1)),
+            axes=(0, 1),
+        )
+    )
+    ** 2,
+    axis=2,
+)
+
+npx = zero_padding_factor * 60
+plt.figure()
+plt.imshow(
+    crop_array(focal_plane_irradiance, (npx, npx)),
+    norm="linear",
+    cmap="inferno",
+)
+plt.title("accessible fourier plane")
 
 # %% Modal dm eigen basis
 
@@ -450,4 +491,4 @@ plt.savefig(fig_dir / "long_exposure_psf.png", bbox_inches="tight")
 
 plt.show()
 
-# %% test
+# %%
