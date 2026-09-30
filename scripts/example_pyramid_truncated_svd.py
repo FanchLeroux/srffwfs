@@ -29,7 +29,6 @@ fig_dir = config.root_dir / "outputs"
 
 # %% simulation parameters
 
-
 # ---------------------- NGS ---------------------- #
 
 # phot.R4 = [0.670e-6, 0.300e-6, 7.66e12]
@@ -239,7 +238,7 @@ plt.yscale("log")
 
 # %%
 
-n_controlled_modes = 800
+n_controlled_modes = 600
 eigen_control_basis = full_eigen_control_basis[:, :n_controlled_modes]
 
 # %% Modal dm eigen basis
