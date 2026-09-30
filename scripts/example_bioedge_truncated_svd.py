@@ -14,47 +14,13 @@ from OOPAO.Telescope import Telescope
 from OOPAO.Atmosphere import Atmosphere
 from OOPAO.Source import Source
 from OOPAO.DeformableMirror import DeformableMirror
-from OOPAO.calibration.compute_KL_modal_basis import compute_M2C
 from OOPAO.BioEdge import BioEdge
 from OOPAO.calibration.InteractionMatrix import InteractionMatrix
 
+from srffwfs.modal_bases.KL_basis import compute_KL_basis
 from srffwfs.sensitivity import compute_photon_noise_sensitivity
 from srffwfs.compute_control_basis import compute_eigen_control_basis
 from srffwfs.closed_loop import close_the_loop
-
-# %% functions definitions
-
-
-@lru_cache(maxsize=None)
-def compute_KL_basis(tel, atm, dm):
-
-    M2C_KL_full, HHt, PSD_atm, df = compute_M2C(
-        telescope=tel,
-        atmosphere=atm,
-        deformableMirror=dm,
-        param=None,
-        nameFolder=None,
-        remove_piston=False,
-        HHtName="KL_covariance_matrix",
-        baseName="KL_basis",
-        mem_available=6.1e9,
-        minimF=False,
-        nmo=None,
-        ortho_spm=True,
-        SZ=np.int64(2 * tel.OPD.shape[0]),
-        nZer=3,
-        NDIVL=1,
-        lim_inversion=1e-16,
-        returnHHt_PSD_df=True,
-        save_output=False,
-    )
-
-    M2C = M2C_KL_full[:, 1:]  # remove piston
-
-    dm.coefs = np.zeros(dm.nValidAct)  # reset dm.OPD
-
-    return M2C
-
 
 # %%
 

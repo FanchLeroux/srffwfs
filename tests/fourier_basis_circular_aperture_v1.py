@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 
-from srffwfs.fourier_basis import get_labels, compute_fourier_basis
+from srffwfs.modal_bases.fourier_basis import get_labels, compute_fourier_basis
 from srffwfs.pattern import get_circular_pupil
 from srffwfs.miscellaneous import orthonormalize_basis
 from srffwfs.miscellaneous import pad_array
