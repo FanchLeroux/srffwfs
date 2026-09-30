@@ -71,22 +71,6 @@ detector_read_out_noise = 0.0  # e- RMS
 # super resolution
 sr_amplitude = 0.25  # [pixel] super resolution shifts amplitude
 
-# [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
-pupil_shift_bioedge = [
-    [
-        sr_amplitude,
-        -sr_amplitude,
-        sr_amplitude,
-        -sr_amplitude,
-    ],
-    [
-        sr_amplitude,
-        -sr_amplitude,
-        -sr_amplitude,
-        sr_amplitude,
-    ],
-]
-
 # -------------------- CALIBRATION - MODAL BASIS ---------------- #
 
 modal_basis = "KL"
@@ -145,7 +129,7 @@ dm = DeformableMirror(tel, nSubap=n_actuator)
 
 # %% ----------------------- Pyramid ---------------------------- #
 
-# super resolved pyramid
+# pyramid
 pyramid_sr = Pyramid(
     nSubap=n_subaperture,
     telescope=tel,
@@ -155,10 +139,32 @@ pyramid_sr = Pyramid(
     postProcessing="fullFrame",
 )
 
+reference_intensities_2d_no_sr = pyramid_sr.referenceSignal_2D
+
+# super resolved pyramid
+pupil_shift_bioedge = [
+    [
+        sr_amplitude,
+        -sr_amplitude,
+        -sr_amplitude,
+        sr_amplitude,
+    ],
+    [
+        -sr_amplitude,
+        -sr_amplitude,
+        sr_amplitude,
+        sr_amplitude,
+    ],
+]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 pyramid_sr.apply_shift_wfs(
     pupil_shift_bioedge[0], pupil_shift_bioedge[1], units="pixels"
-)
+)  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
 pyramid_sr.modulation = modulation  # update reference intensities etc.
+reference_intensities_2d_sr = pyramid_sr.referenceSignal_2D
+
+plt.figure()
+plt.imshow(reference_intensities_2d_sr - reference_intensities_2d_no_sr)
+plt.title("reference intensities difference\nsuper resolved pyramid - pyramid")
 
 # %% ------------------------- MODAL BASIS -------------------------------
 
@@ -207,12 +213,14 @@ photon_noise_sensitivity = compute_photon_noise_sensitivity(
 
 fig_sensitivity, ax_sensitivity = plt.subplots()
 ax_sensitivity.plot(photon_noise_sensitivity)
-ax_sensitivity.axhline(y=2**0.5, color="k", linestyle="--", label=r"$\sqrt{2}$")
+ax_sensitivity.axhline(y=2**0.5 / 2, color="k", linestyle="--", label=r"$\sqrt{2}/2$")
+ax_sensitivity.axhline(y=1, color="k", linestyle=":", label=r"$1$")
 ax_sensitivity.set_xlabel("# mode")
 ax_sensitivity.set_ylabel(r"S_{ph}")
 ax_sensitivity.set_xscale("log")
 ax_sensitivity.set_yscale("log")
 ax_sensitivity.legend(loc="lower left")
+ax_sensitivity.set_title("first calibration basis sensitivity analysis")
 
 # %% compute controll basis using SVD eigenmodes while keeping low order modes
 
@@ -231,7 +239,7 @@ plt.yscale("log")
 
 # %%
 
-n_controlled_modes = 600
+n_controlled_modes = 800
 eigen_control_basis = full_eigen_control_basis[:, :n_controlled_modes]
 
 # %% Modal dm eigen basis
@@ -268,7 +276,8 @@ photon_noise_sensitivity_eigen_basis = compute_photon_noise_sensitivity(
 
 fig_sensitivity, ax_sensitivity = plt.subplots()
 ax_sensitivity.plot(photon_noise_sensitivity_eigen_basis)
-ax_sensitivity.axhline(y=2**0.5, color="k", linestyle="--", label=r"$\sqrt{2}$")
+ax_sensitivity.axhline(y=2**0.5 / 2, color="k", linestyle="--", label=r"$\sqrt{2}/2$")
+ax_sensitivity.axhline(y=1, color="k", linestyle=":", label=r"$1$")
 ax_sensitivity.set_xlabel("# mode")
 ax_sensitivity.set_ylabel(r"S_{ph}")
 ax_sensitivity.set_xscale("log")
@@ -353,8 +362,8 @@ plt.savefig(fig_dir / "strehls.png", bbox_inches="tight")
 
 # long exposure PSF
 plt.figure()
-plt.imshow(np.log(long_exposure_psf_lse_sr))
-plt.title("long_exposure_psf_lse_sr")
+plt.imshow(np.log(long_exposure_psf_lse_sr), norm="linear", cmap="inferno")
+plt.title(f"long_exposure_psf_lse_sr\nPyramid - {n_controlled_modes} controlled modes")
 plt.savefig(fig_dir / "long_exposure_psf.png", bbox_inches="tight")
 
 plt.show()
