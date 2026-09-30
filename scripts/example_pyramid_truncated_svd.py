@@ -14,7 +14,7 @@ from OOPAO.Telescope import Telescope
 from OOPAO.Atmosphere import Atmosphere
 from OOPAO.Source import Source
 from OOPAO.DeformableMirror import DeformableMirror
-from OOPAO.BioEdge import BioEdge
+from OOPAO.Pyramid import Pyramid
 from OOPAO.calibration.InteractionMatrix import InteractionMatrix
 
 from srffwfs.modal_bases.KL_basis import compute_KL_basis
@@ -139,9 +139,26 @@ atm = Atmosphere(
     altitude=altitude,
 )  # [m] altitude of layers
 
-# %% -------------------------     DM   ----------------------------------
+# % -------------------------     DM   ----------------------------------
 
 dm = DeformableMirror(tel, nSubap=n_actuator)
+
+# %% ----------------------- Pyramid ---------------------------- #
+
+# super resolved pyramid
+pyramid_sr = Pyramid(
+    nSubap=n_subaperture,
+    telescope=tel,
+    modulation=modulation,
+    lightRatio=light_threshold,
+    n_pix_separation=n_pix_separation,
+    postProcessing="fullFrame",
+)
+
+pyramid_sr.apply_shift_wfs(
+    pupil_shift_bioedge[0], pupil_shift_bioedge[1], units="pixels"
+)
+pyramid_sr.modulation = modulation  # update reference intensities etc.
 
 # %% ------------------------- MODAL BASIS -------------------------------
 
@@ -163,31 +180,13 @@ first_calibration_modal_dm = DeformableMirror(
     tel, nSubap=n_actuator, modes=calibration_basis
 )
 
-# %% ----------------------- Grey Bi-O-Edge ---------------------------- #
-
-# super resolved grey bioedge
-gbioedge_sr = BioEdge(
-    nSubap=n_subaperture,
-    telescope=tel,
-    modulation=0.0,
-    grey_width=modulation,
-    lightRatio=light_threshold,
-    n_pix_separation=n_pix_separation,
-    postProcessing="fullFrame",
-)
-
-gbioedge_sr.apply_shift_wfs(
-    pupil_shift_bioedge[0], pupil_shift_bioedge[1], units="pixels"
-)
-gbioedge_sr.modulation = 0.0  # update reference intensities etc.
-
 # %% calibration
 
 calib_sr = InteractionMatrix(
     ngs,
     tel,
     first_calibration_modal_dm,
-    gbioedge_sr,
+    pyramid_sr,
     M2C=np.diag(np.ones(first_calibration_modal_dm.nValidAct)),
     stroke=stroke,
     single_pass=single_pass,
@@ -200,7 +199,7 @@ interaction_matrix = calib_sr.D
 # %% sensitivity analysis - allows low order mode cutoff identification
 
 interaction_matrix_rad_normalized = interaction_matrix * wavelength / (2 * np.pi)
-reference_intensities = gbioedge_sr.referenceSignal
+reference_intensities = pyramid_sr.referenceSignal
 
 photon_noise_sensitivity = compute_photon_noise_sensitivity(
     interaction_matrix_rad_normalized, reference_intensities
@@ -232,7 +231,7 @@ plt.yscale("log")
 
 # %%
 
-n_controlled_modes = 900
+n_controlled_modes = 600
 eigen_control_basis = full_eigen_control_basis[:, :n_controlled_modes]
 
 # %% Modal dm eigen basis
@@ -245,7 +244,7 @@ calib_sr_eigen_basis = InteractionMatrix(
     ngs,
     tel,
     eigen_modal_dm,
-    gbioedge_sr,
+    pyramid_sr,
     M2C=np.diag(np.ones(eigen_modal_dm.nValidAct)),
     stroke=stroke,
     single_pass=single_pass,
@@ -261,7 +260,7 @@ interaction_matrix_eigen_basis = calib_sr_eigen_basis.D
 interaction_matrix_eigen_basis_rad_normalized = (
     interaction_matrix_eigen_basis * wavelength / (2 * np.pi)
 )
-reference_intensities = gbioedge_sr.referenceSignal
+reference_intensities = pyramid_sr.referenceSignal
 
 photon_noise_sensitivity_eigen_basis = compute_photon_noise_sensitivity(
     interaction_matrix_eigen_basis_rad_normalized, reference_intensities
@@ -302,7 +301,7 @@ seed = 12  # seed for atmosphere computation
     ngs,
     atm,
     eigen_modal_dm,
-    gbioedge_sr,
+    pyramid_sr,
     reconstructor_lse_sr,
     loop_gain,
     n_iter,
@@ -322,7 +321,7 @@ long_exposure_psf_lse_sr = np.sum(short_exposure_psf_lse_sr[:, :, 100:], axis=2)
 
 # noise propagation
 plt.figure()
-plt.plot(np.diag(reconstructor_lse_sr @ reconstructor_lse_sr.T) / gbioedge_sr.nSignal)
+plt.plot(np.diag(reconstructor_lse_sr @ reconstructor_lse_sr.T) / pyramid_sr.nSignal)
 plt.yscale("log")
 plt.title("modal uniform noise propagation")
 plt.xlabel("# modes")
