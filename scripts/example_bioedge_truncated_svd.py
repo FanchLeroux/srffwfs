@@ -1,6 +1,5 @@
 # %% imports
 
-import pathlib
 from functools import lru_cache
 
 import numpy as np
@@ -65,117 +64,75 @@ fig_dir = config.root_dir / "outputs"
 # %% Define parameters
 
 
-# initialize the dictionary
-param = {}
-
-# fill the dictionary
-
 # ---------------------- NGS ---------------------- #
 
 # phot.R4 = [0.670e-6, 0.300e-6, 7.66e12]
 wavelength = 670e-9  # [m] wavelength of the guide star
-param["optical_band"] = "R4"  # optical band of the guide star
-param["magnitude"] = 8  # magnitude of the guide star
+optical_band = "R4"  # optical band of the guide star
+magnitude = 8  # magnitude of the guide star
 
 # ------------------ ATMOSPHERE ----------------- #
 
-param["r0"] = 0.1  # [m] value of r0 at 500 nm
-param["L0"] = 30  # [m] value of L0 in the visibile
-param["fractionnal_r0"] = [0.45, 0.1, 0.1, 0.25, 0.1]  # Cn2 profile (percentage)
-param["wind_speed"] = [5, 4, 8, 10, 2]  # [m.s-1] wind speed of  layers
-param["wind_direction"] = [0, 72, 144, 216, 288]  # [degrees] wind direction of layers
-param["altitude"] = [0, 1000, 5000, 10000, 12000]  # [m] altitude of layers
-param["seeds"] = range(1)
+r0 = 0.1  # [m] value of r0 at 500 nm
+external_scale = 30  # [m] value of L0 in the visibile
+fractional_r0 = [0.45, 0.1, 0.1, 0.25, 0.1]  # Cn2 profile (percentage)
+wind_speed = [5, 4, 8, 10, 2]  # [m.s-1] wind speed of layers
+wind_direction = [0, 72, 144, 216, 288]  # [degrees] wind direction of layers
+altitude = [0, 1000, 5000, 10000, 12000]  # [m] altitude of layers
 
 # ------------------- TELESCOPE ------------------ #
 
-param["diameter"] = 2  # [m] telescope diameter
-param["n_subaperture"] = 20  # number of WFS subaperture along the
-# telescope diameter
-# [pixel] sampling of the WFS subapertures
-param["n_pixel_per_subaperture"] = 8
-# in telescope pupil space
-param["resolution"] = (
-    param["n_subaperture"] * param["n_pixel_per_subaperture"]
-)  # resolution of the telescope driven by
-# the WFS
-param["size_subaperture"] = (
-    param["diameter"] / param["n_subaperture"]
-)  # [m] size of a subaperture projected in M1 space
-param["sampling_time"] = 1 / 1000  # [s] loop sampling time
-param["centralObstruction"] = 0  # central obstruction in percentage
-# of the diameter
-
+diameter = 2  # [m] telescope diameter
+n_subaperture = 20  # number of WFS subaperture along the telescope diameter
+n_pixel_per_subaperture = (
+    8  # [pixel] sampling of the WFS subapertures in telescope pupil space
+)
+resolution = (
+    n_subaperture * n_pixel_per_subaperture
+)  # resolution of the telescope driven by the WFS
 # ------------------------ DM --------------------- #
 
-param["n_actuator"] = 2 * param["n_subaperture"]  # number of actuators
+n_actuator = 2 * n_subaperture  # number of actuators
 
 # ----------------------- WFS ---------------------- #
 
-param["modulation"] = 2.0  # [lambda/D] modulation radius or half grey width
-param["n_pix_separation"] = 10  # [pixel] separation ratio between the pupils
-param["psf_centering"] = False  # centering of the FFT and of the mask on
-# the 4 central pixels
-param["light_threshold"] = 0.3  # light threshold to select the valid pixels
-param["post_processing"] = "fullFrame"  # post-processing of the WFS signals
-# ('slopesMaps' or 'fullFrame')
-param["detector_photon_noise"] = False
-param["detector_read_out_noise"] = 0.0  # e- RMS
+modulation = 2.0  # [lambda/D] modulation radius or half grey width
+n_pix_separation = 10  # [pixel] separation ratio between the pupils
+light_threshold = 0.3  # light threshold to select the valid pixels
+detector_photon_noise = False
+detector_read_out_noise = 0.0  # e- RMS
 
 # super resolution
-param["sr_amplitude"] = 0.25  # [pixel] super resolution shifts amplitude
+sr_amplitude = 0.25  # [pixel] super resolution shifts amplitude
 
 # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
-param["pupil_shift_bioedge"] = [
+pupil_shift_bioedge = [
     [
-        param["sr_amplitude"],
-        -param["sr_amplitude"],
-        param["sr_amplitude"],
-        -param["sr_amplitude"],
+        sr_amplitude,
+        -sr_amplitude,
+        sr_amplitude,
+        -sr_amplitude,
     ],
     [
-        param["sr_amplitude"],
-        -param["sr_amplitude"],
-        -param["sr_amplitude"],
-        param["sr_amplitude"],
+        sr_amplitude,
+        -sr_amplitude,
+        -sr_amplitude,
+        sr_amplitude,
     ],
 ]
 
 # -------------------- CALIBRATION - MODAL BASIS ---------------- #
 
-param["modal_basis"] = "KL"
-# [m] actuator stroke for interaction matrix computation
+modal_basis = "KL"
 stroke_rad = 0.01  # [rad]
-param["stroke"] = stroke_rad * wavelength / (2 * np.pi)  # [nm]
-param["single_pass"] = False  # push-pull or push only for the calibration
-param["compute_M2C_Folder"] = str(pathlib.Path(__file__).parent)
-
-# ----------------------- RECONSTRUCTION ------------------------ #
-
-param["n_modes_to_show_lse_sr"] = 900
+stroke = stroke_rad * wavelength / (2 * np.pi)  # [nm]
+single_pass = False  # push-pull or push only for the calibration
 
 # -------------------- LOOP ----------------------- #
 
-param["loop_gain"] = 0.7
-
-param["n_iter"] = 200
-
-param["delay"] = 1
-
-# --------------------- FILENAME -------------------- #
-
-# name of the system
-param["filename"] = (
-    "_"
-    + param["optical_band"]
-    + "_band_"
-    + str(param["n_subaperture"])
-    + "x"
-    + str(param["n_subaperture"])
-    + "_"
-    + param["modal_basis"]
-    + "_basis"
-)
+loop_gain = 0.7
+n_iter = 200
+delay = 1
 
 # %% Build objects
 
@@ -183,18 +140,18 @@ param["filename"] = (
 
 # create the Telescope object
 tel = Telescope(
-    resolution=param["resolution"],  # [pixel] resolution of
+    resolution=resolution,  # [pixel] resolution of
     # the telescope
-    diameter=param["diameter"],
+    diameter=diameter,
 )  # [m] telescope diameter
 
 # % -----------------------     NGS   ----------------------------------
 
 # create the Natural Guide Star object
 ngs = Source(
-    optBand=param["optical_band"],  # Source optical band
+    optBand=optical_band,  # Source optical band
     # (see photometry.py)
-    magnitude=param["magnitude"],
+    magnitude=magnitude,
 )  # Source Magnitude
 
 # % -----------------------    ATMOSPHERE   ----------------------------
@@ -205,28 +162,28 @@ ngs * tel
 # create the Atmosphere object
 atm = Atmosphere(
     telescope=tel,  # Telescope
-    r0=param["r0"],  # Fried Parameter [m]
-    L0=param["L0"],  # Outer Scale [m]
+    r0=r0,  # Fried Parameter [m]
+    L0=external_scale,  # Outer Scale [m]
     # Cn2 Profile (percentage)
-    fractionalR0=param["fractionnal_r0"],
-    windSpeed=param["wind_speed"],  # [m.s-1] wind speed of layers
+    fractionalR0=fractional_r0,
+    windSpeed=wind_speed,  # [m.s-1] wind speed of layers
     # [degrees] wind direction
-    windDirection=param["wind_direction"],
+    windDirection=wind_direction,
     # of layers
-    altitude=param["altitude"],
+    altitude=altitude,
 )  # [m] altitude of layers
 
 # %% -------------------------     DM   ----------------------------------
 
-dm = DeformableMirror(tel, nSubap=param["n_actuator"])
+dm = DeformableMirror(tel, nSubap=n_actuator)
 
 # %% ------------------------- MODAL BASIS -------------------------------
 
-if param["modal_basis"] == "KL":
+if modal_basis == "KL":
     M2C = compute_KL_basis(tel, atm, dm)
     ngs**tel  # reset
 
-elif param["modal_basis"] == "poke":
+elif modal_basis == "poke":
     M2C = np.identity(dm.nValidAct)
 
 # %% extract calibration basis
@@ -237,24 +194,24 @@ calibration_basis = influence_functions @ M2C
 # %% -------------------------   Modal  DM   ----------------------------------
 
 first_calibration_modal_dm = DeformableMirror(
-    tel, nSubap=param["n_actuator"], modes=calibration_basis
+    tel, nSubap=n_actuator, modes=calibration_basis
 )
 
 # %% ----------------------- Grey Bi-O-Edge ---------------------------- #
 
 # super resolved grey bioedge
 gbioedge_sr = BioEdge(
-    nSubap=param["n_subaperture"],
+    nSubap=n_subaperture,
     telescope=tel,
     modulation=0.0,
-    grey_width=param["modulation"],
-    lightRatio=param["light_threshold"],
-    n_pix_separation=param["n_pix_separation"],
+    grey_width=modulation,
+    lightRatio=light_threshold,
+    n_pix_separation=n_pix_separation,
     postProcessing="fullFrame",
 )
 
 gbioedge_sr.apply_shift_wfs(
-    param["pupil_shift_bioedge"][0], param["pupil_shift_bioedge"][1], units="pixels"
+    pupil_shift_bioedge[0], pupil_shift_bioedge[1], units="pixels"
 )
 gbioedge_sr.modulation = 0.0  # update reference intensities etc.
 
@@ -266,8 +223,8 @@ calib_sr = InteractionMatrix(
     first_calibration_modal_dm,
     gbioedge_sr,
     M2C=np.diag(np.ones(first_calibration_modal_dm.nValidAct)),
-    stroke=param["stroke"],
-    single_pass=param["single_pass"],
+    stroke=stroke,
+    single_pass=single_pass,
     noise="off",
     display=True,
 )
@@ -314,9 +271,7 @@ eigen_control_basis = full_eigen_control_basis[:, :n_controlled_modes]
 
 # %% Modal dm eigen basis
 
-eigen_modal_dm = DeformableMirror(
-    tel, nSubap=param["n_actuator"], modes=eigen_control_basis
-)
+eigen_modal_dm = DeformableMirror(tel, nSubap=n_actuator, modes=eigen_control_basis)
 
 # %% calibration with eigen control basis
 
@@ -326,8 +281,8 @@ calib_sr_eigen_basis = InteractionMatrix(
     eigen_modal_dm,
     gbioedge_sr,
     M2C=np.diag(np.ones(eigen_modal_dm.nValidAct)),
-    stroke=param["stroke"],
-    single_pass=param["single_pass"],
+    stroke=stroke,
+    single_pass=single_pass,
     noise="off",
     display=True,
 )
@@ -383,11 +338,11 @@ seed = 12  # seed for atmosphere computation
     eigen_modal_dm,
     gbioedge_sr,
     reconstructor_lse_sr,
-    param["loop_gain"],
-    param["n_iter"],
-    delay=param["delay"],
-    photon_noise=param["detector_photon_noise"],
-    read_out_noise=param["detector_read_out_noise"],
+    loop_gain,
+    n_iter,
+    delay=delay,
+    photon_noise=detector_photon_noise,
+    read_out_noise=detector_read_out_noise,
     seed=seed,
     save_telemetry=True,
     save_psf=True,
@@ -405,7 +360,7 @@ plt.plot(np.diag(reconstructor_lse_sr @ reconstructor_lse_sr.T) / gbioedge_sr.nS
 plt.yscale("log")
 plt.title("modal uniform noise propagation")
 plt.xlabel("# modes")
-plt.savefig(fig_dir / pathlib.Path("noise_propagation" + ".png"), bbox_inches="tight")
+plt.savefig(fig_dir / "noise_propagation.png", bbox_inches="tight")
 
 # %%
 
@@ -417,7 +372,7 @@ plt.xlabel("loop iteration")
 plt.ylabel("residual phase RMS [nm]")
 plt.title("Closed Loop residuals")
 plt.legend()
-plt.savefig(fig_dir / pathlib.Path("residuals" + ".png"), bbox_inches="tight")
+plt.savefig(fig_dir / "residuals.png", bbox_inches="tight")
 
 # %%
 
@@ -427,7 +382,7 @@ plt.plot(strehl_lse_sr, label="strehl_lse_sr")
 plt.ylabel("strehl phase RMS [nm]")
 plt.title("Closed Loop strehls")
 plt.legend()
-plt.savefig(fig_dir / pathlib.Path("strehls" + ".png"), bbox_inches="tight")
+plt.savefig(fig_dir / "strehls.png", bbox_inches="tight")
 
 # %%
 
@@ -435,7 +390,7 @@ plt.savefig(fig_dir / pathlib.Path("strehls" + ".png"), bbox_inches="tight")
 plt.figure()
 plt.imshow(np.log(long_exposure_psf_lse_sr))
 plt.title("long_exposure_psf_lse_sr")
-plt.savefig(fig_dir / pathlib.Path("long_exposure_psf" + ".png"), bbox_inches="tight")
+plt.savefig(fig_dir / "long_exposure_psf.png", bbox_inches="tight")
 
 plt.show()
 
