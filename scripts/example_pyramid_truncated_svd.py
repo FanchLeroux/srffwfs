@@ -246,7 +246,7 @@ interaction_matrix = calib_sr.D
 
 # %% Visualize interaction matrix
 
-mode_index = 4  # index of the mode to visualize
+mode_index = 50  # index of the mode to visualize
 support_mode = np.full(tel.pupil.shape, np.nan)
 support_mode[tel.pupil] = calibration_basis[tel.pupil.reshape(-1), mode_index]
 support_imat = np.full(pyramid_sr.valid_signal_2D.shape, np.nan)
@@ -272,8 +272,10 @@ photon_noise_sensitivity = compute_photon_noise_sensitivity(
 
 fig_sensitivity, ax_sensitivity = plt.subplots()
 ax_sensitivity.plot(photon_noise_sensitivity)
-ax_sensitivity.axhline(y=2**0.5 / 2, color="k", linestyle="--", label=r"$\sqrt{2}/2$")
-ax_sensitivity.axhline(y=1, color="k", linestyle=":", label=r"$1$")
+ax_sensitivity.axhline(y=2**0.5 / 2, color="k", linestyle=":", label=r"$\sqrt{2}/2$")
+ax_sensitivity.axhline(y=1, color="k", linestyle="--", label=r"$1$")
+ax_sensitivity.axhline(y=2**0.5, color="k", linestyle="-.", label=r"$\sqrt{2}$")
+ax_sensitivity.axhline(y=2, color="k", linestyle="-", label=r"$2$")
 ax_sensitivity.set_xlabel("# mode")
 ax_sensitivity.set_ylabel(r"S_{ph}")
 ax_sensitivity.set_xscale("log")
@@ -283,7 +285,7 @@ ax_sensitivity.set_title("first calibration basis sensitivity analysis")
 
 # %% compute controll basis using SVD eigenmodes while keeping low order modes
 
-n_lo_modes_to_keep = 75  # ~ pi * r_mod**2
+n_lo_modes_to_keep = 10  # ~ pi * r_mod**2
 
 full_eigen_control_basis, s_eigen_control_basis = compute_eigen_control_basis(
     calibration_basis, interaction_matrix, n_lo_modes_to_keep
@@ -299,6 +301,13 @@ n_controlled_modes = 600
 
 plt.figure()
 plt.plot(s_eigen_control_basis)
+plt.axvspan(
+    0,
+    n_lo_modes_to_keep - 1,
+    color="grey",
+    alpha=0.3,
+    label=f" {n_lo_modes_to_keep} low order modes kept",
+)
 plt.axvline(
     x=n_controlled_modes,
     color="k",
