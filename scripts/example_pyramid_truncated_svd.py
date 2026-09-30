@@ -141,22 +141,55 @@ pyramid_sr = Pyramid(
 reference_intensities_2d_no_sr = pyramid_sr.referenceSignal_2D
 
 # super resolved pyramid
-pupil_shift_bioedge = [
+
+pupil_shifts_horizontal = [
     [
-        sr_amplitude,
-        -sr_amplitude,
-        -sr_amplitude,
-        sr_amplitude,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
     ],
     [
-        -sr_amplitude,
-        -sr_amplitude,
-        sr_amplitude,
-        sr_amplitude,
+        0.0,
+        0.5,
+        0.0,
+        0.0,
+    ],
+]
+
+pupil_shifts_quincux = [
+    [
+        0.25,
+        -0.25,
+        -0.25,
+        0.25,
+    ],
+    [
+        -0.25,
+        -0.25,
+        0.25,
+        0.25,
     ],
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
+
+pupil_shifts_quincux_alt = [
+    [
+        -0.25,
+        0.25,
+        0.25,
+        -0.25,
+    ],
+    [
+        -0.25,
+        -0.25,
+        0.25,
+        0.25,
+    ],
+]
+
+pupil_shifts = pupil_shifts_quincux_alt  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
 pyramid_sr.apply_shift_wfs(
-    pupil_shift_bioedge[0], pupil_shift_bioedge[1], units="pixels"
+    pupil_shifts[0], pupil_shifts[1], units="pixels"
 )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
 pyramid_sr.modulation = modulation  # update reference intensities etc.
 reference_intensities_2d_sr = pyramid_sr.referenceSignal_2D
@@ -201,6 +234,23 @@ calib_sr = InteractionMatrix(
 
 interaction_matrix = calib_sr.D
 
+# %% Visualize interaction matrix
+
+mode_index = 4  # index of the mode to visualize
+support_mode = np.full(tel.pupil.shape, np.nan)
+support_mode[tel.pupil] = calibration_basis[tel.pupil.reshape(-1), mode_index]
+support_imat = np.full(pyramid_sr.valid_signal_2D.shape, np.nan)
+support_imat[pyramid_sr.valid_signal_2D] = interaction_matrix[:, mode_index]
+
+fig, axs = plt.subplots(1, 2)
+axs[0].imshow(support_mode, cmap="viridis")
+axs[0].set_title(f"Calibration basis - mode {mode_index}")
+axs[0].axis("off")
+axs[1].imshow(support_imat, cmap="viridis")
+axs[1].set_title(f"Interaction matrix signal")
+axs[1].axis("off")
+
+
 # %% sensitivity analysis - allows low order mode cutoff identification
 
 interaction_matrix_rad_normalized = interaction_matrix * wavelength / (2 * np.pi)
@@ -223,22 +273,36 @@ ax_sensitivity.set_title("first calibration basis sensitivity analysis")
 
 # %% compute controll basis using SVD eigenmodes while keeping low order modes
 
-n_lo_modes_to_keep = 100
+n_lo_modes_to_keep = 75  # ~ pi * r_mod**2
 
 full_eigen_control_basis, s_eigen_control_basis = compute_eigen_control_basis(
     calibration_basis, interaction_matrix, n_lo_modes_to_keep
 )
 
+# %% plot singular values of the eigen control basis to choose the controlmodal cutoff
+
+n_controlled_modes = (
+    pyramid_sr.nSignal // 2
+)  # number of controlled modes (modal cutoff)
+
+# n_controlled_modes = 700
+
 plt.figure()
 plt.plot(s_eigen_control_basis)
+plt.axvline(
+    x=n_controlled_modes,
+    color="k",
+    linestyle="--",
+    label=f"modal cutoff: {n_controlled_modes} modes",
+)
 plt.title("Singular values of the eigen control basis")
 plt.xlabel("# mode")
 plt.ylabel("Singular value")
 plt.yscale("log")
+plt.legend()
 
 # %%
 
-n_controlled_modes = 600
 eigen_control_basis = full_eigen_control_basis[:, :n_controlled_modes]
 
 # %% Modal dm eigen basis
