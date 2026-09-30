@@ -8,7 +8,7 @@ from srffwfs.modal_bases.fourier_basis import (
     get_labels,
     compute_fourier_basis,
 )
-from srffwfs.miscellaneous import get_circular_pupil
+from srffwfs.pattern import get_circular_pupil
 from srffwfs.binning import bin_2d
 from srffwfs.config import Config
 

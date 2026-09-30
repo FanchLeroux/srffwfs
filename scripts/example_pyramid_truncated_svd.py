@@ -1,6 +1,7 @@
 # %% imports
 
 from functools import lru_cache
+from copy import deepcopy
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -17,6 +18,7 @@ from OOPAO.DeformableMirror import DeformableMirror
 from OOPAO.Pyramid import Pyramid
 from OOPAO.calibration.InteractionMatrix import InteractionMatrix
 
+from srffwfs.pattern import get_circular_pupil
 from srffwfs.modal_bases.KL_basis import compute_KL_basis
 from srffwfs.sensitivity import compute_photon_noise_sensitivity
 from srffwfs.compute_control_basis import compute_eigen_control_basis
@@ -38,7 +40,7 @@ magnitude = 8  # magnitude of the guide star
 
 # ------------------ ATMOSPHERE ----------------- #
 
-r0 = 0.1  # [m] value of r0 at 500 nm
+r0 = 0.35  # [m] value of r0 at 500 nm
 external_scale = 30  # [m] value of L0 in the visibile
 fractional_r0 = [0.45, 0.1, 0.1, 0.25, 0.1]  # Cn2 profile (percentage)
 wind_speed = [5, 4, 8, 10, 2]  # [m.s-1] wind speed of layers
@@ -55,15 +57,20 @@ n_pixel_per_subaperture = (
 resolution = (
     n_subaperture * n_pixel_per_subaperture
 )  # resolution of the telescope driven by the WFS
-# ------------------------ DM --------------------- #
+pupil_oversampling_factor: int = (
+    10  # oversampling the pupil then bin it to avoid edge effects
+)
+# ------------------------ DM ---------------------- #
 
 n_actuator = 2 * n_subaperture  # number of actuators
 
 # ----------------------- WFS ---------------------- #
 
-modulation = 5.0  # [lambda/D] modulation radius or half grey width
+modulation = 0.0  # [lambda/D] modulation radius or half grey width
 n_pix_separation = 10  # [pixel] separation ratio between the pupils
-light_threshold = 0.3  # light threshold to select the valid pixels
+light_threshold = (
+    0.3 if modulation > 0.0 else 0
+)  # light threshold to select the valid pixels
 detector_photon_noise = False
 detector_read_out_noise = 0.0  # e- RMS
 
@@ -93,8 +100,25 @@ tel = Telescope(
     # the telescope
     diameter=diameter,
 )  # [m] telescope diameter
+pupil_oversampled = get_circular_pupil(tel.resolution * pupil_oversampling_factor)
+pupil_binned = pupil_oversampled.reshape(
+    tel.resolution,
+    pupil_oversampling_factor,
+    tel.resolution,
+    pupil_oversampling_factor,
+).mean(axis=(1, 3))
 
-# % -----------------------     NGS   ----------------------------------
+# original_pupil = deepcopy(tel.pupil)
+# tel.pupil = pupil_binned
+# tel.pupilReflectivity = pupil_binned  # set the pupil reflectivity to the binned pupil
+
+# fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+# axs[0].imshow(original_pupil)
+# axs[0].set_title("original pupil")
+# axs[1].imshow(tel.pupilReflectivity)
+# axs[1].set_title("new oversampled then binned Pupil")
+
+# %% -----------------------     NGS   ----------------------------------
 
 # create the Natural Guide Star object
 ngs = Source(
@@ -172,22 +196,7 @@ pupil_shifts_quincux = [
     ],
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
-pupil_shifts_quincux_alt = [
-    [
-        -0.25,
-        0.25,
-        0.25,
-        -0.25,
-    ],
-    [
-        -0.25,
-        -0.25,
-        0.25,
-        0.25,
-    ],
-]
-
-pupil_shifts = pupil_shifts_quincux_alt  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
+pupil_shifts = pupil_shifts_quincux  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
 pyramid_sr.apply_shift_wfs(
     pupil_shifts[0], pupil_shifts[1], units="pixels"
 )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
@@ -211,6 +220,7 @@ elif modal_basis == "poke":
 
 influence_functions = dm.modes
 calibration_basis = influence_functions @ M2C
+calibration_basis = tel.pupil.reshape(-1, 1) * calibration_basis  # apply pupil mask
 
 # %% -------------------------   Modal  DM   ----------------------------------
 
@@ -285,7 +295,7 @@ n_controlled_modes = (
     pyramid_sr.nSignal // 2
 )  # number of controlled modes (modal cutoff)
 
-# n_controlled_modes = 700
+n_controlled_modes = 600
 
 plt.figure()
 plt.plot(s_eigen_control_basis)
@@ -431,4 +441,4 @@ plt.savefig(fig_dir / "long_exposure_psf.png", bbox_inches="tight")
 
 plt.show()
 
-# %%
+# %% test
