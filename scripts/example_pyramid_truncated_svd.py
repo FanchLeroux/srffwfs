@@ -66,7 +66,7 @@ n_actuator = 2 * n_subaperture  # number of actuators
 
 # ----------------------- WFS ---------------------- #
 
-modulation = 2.0  # [lambda/D] modulation radius or half grey width
+modulation = 5.0  # [lambda/D] modulation radius or half grey width
 n_pix_separation = 10  # [pixel] separation ratio between the pupils
 light_threshold = (
     0.3 if modulation > 0.0 else 0
@@ -222,6 +222,32 @@ plt.figure()
 plt.imshow(reference_intensities_2d_sr - reference_intensities_2d_no_sr)
 plt.title("reference intensities difference\nsuper resolved pyramid - pyramid")
 
+pupil_1 = deepcopy(pyramid_sr.valid_signal_2D)
+pupil_1[pupil_1.shape[0] // 2 :, :] = 0
+pupil_1[:, pupil_1.shape[1] // 2 :] = 0
+
+pupil_2 = deepcopy(pyramid_sr.valid_signal_2D)
+pupil_2[pupil_2.shape[0] // 2 :, :] = 0
+pupil_2[:, : pupil_2.shape[1] // 2] = 0
+
+pupil_3 = deepcopy(pyramid_sr.valid_signal_2D)
+pupil_3[: pupil_3.shape[0] // 2, :] = 0
+pupil_3[:, pupil_3.shape[1] // 2 :] = 0
+
+pupil_4 = deepcopy(pyramid_sr.valid_signal_2D)
+pupil_4[: pupil_4.shape[0] // 2, :] = 0
+pupil_4[:, : pupil_4.shape[1] // 2] = 0
+
+fig, axs = plt.subplots(2, 2)
+axs[0, 0].imshow(pupil_1)
+axs[0, 0].set_title("Pupil 1")
+axs[0, 1].imshow(pupil_2)
+axs[0, 1].set_title("Pupil 2")
+axs[1, 0].imshow(pupil_3)
+axs[1, 0].set_title("Pupil 3")
+axs[1, 1].imshow(pupil_4)
+axs[1, 1].set_title("Pupil 4")
+
 # %% ------------------------- MODAL BASIS -------------------------------
 
 if modal_basis == "KL":
@@ -266,7 +292,7 @@ print(
 
 # %% Visualize interaction matrix
 
-mode_index = 50  # index of the mode to visualize
+mode_index = 600  # index of the mode to visualize
 support_mode = np.full(tel.pupil.shape, np.nan)
 support_mode[tel.pupil] = calibration_basis[tel.pupil.reshape(-1), mode_index]
 support_imat = np.full(pyramid_sr.valid_signal_2D.shape, np.nan)
@@ -279,9 +305,48 @@ axs[0].axis("off")
 axs[1].imshow(support_imat, cmap="viridis")
 axs[1].set_title(f"Interaction matrix signal")
 axs[1].axis("off")
+plt.colorbar(axs[1].imshow(support_imat, cmap="viridis"), ax=axs[1])
 
+# %% differentiate the diagonal pupils
+
+imat_pupil_1 = np.full(pyramid_sr.valid_signal_2D.shape, 0.0)
+imat_pupil_4 = np.full(pyramid_sr.valid_signal_2D.shape, 0.0)
+imat_pupil_1[pyramid_sr.valid_signal_2D] = interaction_matrix[:, mode_index]
+imat_pupil_4[pyramid_sr.valid_signal_2D] = interaction_matrix[:, mode_index]
+imat_pupil_1 = imat_pupil_1[pupil_1]
+imat_pupil_4 = imat_pupil_4[pupil_4]
+
+diff_imat = imat_pupil_1 + imat_pupil_4
+
+support = np.full(pyramid_sr.valid_signal_2D.shape, np.nan)
+support[pupil_1] = diff_imat
+
+plt.figure()
+plt.imshow(support, cmap="viridis")
+plt.colorbar()
+plt.title("Difference in interaction matrix between pupils 1 and 4")
+
+# %% corelate the pupils
+
+from skimage.registration import phase_cross_correlation
+
+imat_pupil_1_2d = np.full(pyramid_sr.valid_signal_2D.shape, 0.0)
+imat_pupil_4_2d = np.full(pyramid_sr.valid_signal_2D.shape, 0.0)
+imat_pupil_1_2d[pupil_1] = imat_pupil_1
+imat_pupil_4_2d[pupil_1] = imat_pupil_4
+
+shift, error, phasediff = phase_cross_correlation(
+    imat_pupil_1_2d,
+    -imat_pupil_4_2d,
+    upsample_factor=100,
+)
+
+print(f"dy = {shift[0]:.3f} px")
+print(f"dx = {shift[1]:.3f} px")
 
 # %% sensitivity analysis - allows low/high order mode cutoff identification
+
+n_lo_modes_to_keep = int(np.round(np.pi * modulation**2))
 
 interaction_matrix_rad_normalized = interaction_matrix * wavelength / (2 * np.pi)
 reference_intensities = pyramid_sr.referenceSignal
@@ -296,6 +361,13 @@ ax_sensitivity.axhline(y=2**0.5 / 2, color="k", linestyle=":", label=r"$\sqrt{2}
 ax_sensitivity.axhline(y=1, color="k", linestyle="--", label=r"$1$")
 ax_sensitivity.axhline(y=2**0.5, color="k", linestyle="-.", label=r"$\sqrt{2}$")
 ax_sensitivity.axhline(y=2, color="k", linestyle="-", label=r"$2$")
+ax_sensitivity.axvline(
+    n_lo_modes_to_keep,
+    color="r",
+    linestyle="--",
+    label=f"low order modes cutoff: {n_lo_modes_to_keep:.0f}",
+)
+
 ax_sensitivity.set_xlabel("# mode")
 ax_sensitivity.set_ylabel(r"S_{ph}")
 ax_sensitivity.set_xscale("log")
@@ -304,8 +376,6 @@ ax_sensitivity.legend(loc="lower left")
 ax_sensitivity.set_title("first calibration basis sensitivity analysis")
 
 # %% compute controll basis using SVD eigenmodes while keeping low order modes
-
-n_lo_modes_to_keep = 10  # ~ pi * r_mod**2
 
 full_eigen_control_basis, s_eigen_control_basis = compute_eigen_control_basis(
     calibration_basis, interaction_matrix, n_lo_modes_to_keep
