@@ -50,9 +50,9 @@ altitude = [0, 1000, 5000, 10000, 12000]  # [m] altitude of layers
 # ------------------- TELESCOPE ------------------ #
 
 diameter = 2  # [m] telescope diameter
-n_subaperture = 20  # number of WFS subaperture along the telescope diameter
+n_subaperture = 8  # number of WFS subaperture along the telescope diameter
 n_pixel_per_subaperture = (
-    8  # [pixel] sampling of the WFS subapertures in telescope pupil space
+    16  # [pixel] sampling of the WFS subapertures in telescope pupil space
 )
 resolution = (
     n_subaperture * n_pixel_per_subaperture
@@ -66,7 +66,7 @@ n_actuator = 2 * n_subaperture  # number of actuators
 
 # ----------------------- WFS ---------------------- #
 
-modulation = 5.0  # [lambda/D] modulation radius or half grey width
+modulation = 3.0  # [lambda/D] modulation radius or half grey width
 n_pix_separation = 10  # [pixel] separation ratio between the pupils
 light_threshold = (
     0.3 if modulation > 0.0 else 0
@@ -307,7 +307,7 @@ print(
 
 # %% Visualize interaction matrix
 
-mode_index = 600  # index of the mode to visualize
+mode_index = 2  # index of the mode to visualize
 support_mode = np.full(tel.pupil.shape, np.nan)
 support_mode[tel.pupil] = calibration_basis[tel.pupil.reshape(-1), mode_index]
 support_imat = np.full(pyramid_sr.valid_signal_2D.shape, np.nan)
@@ -398,7 +398,9 @@ full_eigen_control_basis, s_eigen_control_basis = compute_eigen_control_basis(
 
 # %% plot singular values of the eigen control basis to choose the controlmodal cutoff
 
-n_controlled_modes = 400  # number of controlled modes (modal cutoff)
+n_controlled_modes = int(
+    pyramid_sr.nSignal / 3
+)  # number of controlled modes (modal cutoff)
 
 plt.figure()
 plt.plot(s_eigen_control_basis)
@@ -408,6 +410,24 @@ plt.axvspan(
     color="grey",
     alpha=0.3,
     label=f" {n_lo_modes_to_keep} low order modes kept",
+)
+plt.axvline(
+    x=pyramid_sr.nSignal // 4,
+    color="r",
+    linestyle=":",
+    label=f"n_valid_pixels/4",
+)
+plt.axvline(
+    x=pyramid_sr.nSignal // 2,
+    color="r",
+    linestyle="--",
+    label=f"n_valid_pixels/2",
+)
+plt.axvline(
+    x=pyramid_sr.nSignal,
+    color="r",
+    linestyle="-",
+    label=f"n_valid_pixels",
 )
 plt.axvline(
     x=n_controlled_modes,
