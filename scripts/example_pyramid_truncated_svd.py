@@ -241,7 +241,7 @@ pupil_shifts_quincux = [
     ],
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
-pupil_shifts = pupil_shifts_zeros  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
+pupil_shifts = pupil_shifts_vertical  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
 pyramid_sr.apply_shift_wfs(
     pupil_shifts[0], pupil_shifts[1], units="pixels"
 )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
