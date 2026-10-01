@@ -10,7 +10,10 @@ from OOPAO.DeformableMirror import DeformableMirror
 
 @lru_cache(maxsize=None)
 def compute_KL_basis(
-    tel: Telescope, atm: Atmosphere, dm: DeformableMirror
+    tel: Telescope,
+    atm: Atmosphere,
+    dm: DeformableMirror,
+    return_covariance: bool = False,
 ) -> np.ndarray:
 
     M2C_KL_full, HHt, PSD_atm, df = compute_M2C(
@@ -34,8 +37,20 @@ def compute_KL_basis(
         save_output=False,
     )
 
-    M2C = M2C_KL_full[:, 1:]  # remove piston
+    m2c = M2C_KL_full[:, 1:]  # remove piston
 
     dm.coefs = np.zeros(dm.nValidAct)  # reset dm.OPD
 
-    return M2C
+    if return_covariance:
+
+        c_phi = (
+            (1.0 / tel.pupil.sum() ** 2.0)
+            * m2c.T
+            @ HHt
+            @ m2c
+            * (tel.src.wavelength / (2.0 * np.pi)) ** 2
+        )
+
+        return m2c, c_phi
+    else:
+        return m2c

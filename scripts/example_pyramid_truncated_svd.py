@@ -281,16 +281,16 @@ axs[1, 1].set_title("Pupil 4")
 # %% ------------------------- MODAL BASIS -------------------------------
 
 if modal_basis == "KL":
-    M2C = compute_KL_basis(tel, atm, dm)
+    m2c, c_phi = compute_KL_basis(tel, atm, dm, return_covariance=True)
     ngs**tel  # reset
 
 elif modal_basis == "poke":
-    M2C = np.identity(dm.nValidAct)
+    m2c = np.identity(dm.nValidAct)
 
 # %% extract calibration basis
 
 influence_functions = dm.modes
-calibration_basis = influence_functions @ M2C
+calibration_basis = influence_functions @ m2c
 calibration_basis = tel.pupil.reshape(-1, 1) * calibration_basis  # apply pupil mask
 
 # %% -------------------------   Modal  DM   ----------------------------------
@@ -548,6 +548,13 @@ ax_sensitivity.set_title("eigen control basis sensitivity analysis")
 
 reconstructor_lse_sr = np.linalg.pinv(interaction_matrix_eigen_basis)
 
+# %% map
+reconstructor_lse_sr = (
+    c_phi
+    @ interaction_matrix.T
+    @ np.linalg.pinv(interaction_matrix @ c_phi @ interaction_matrix.T)
+)
+
 # %% SEED
 
 seed = 12  # seed for atmosphere computation
@@ -568,7 +575,7 @@ seed = 12  # seed for atmosphere computation
     tel,
     ngs,
     atm,
-    eigen_modal_dm,
+    first_calibration_modal_dm,
     pyramid_sr,
     reconstructor_lse_sr,
     loop_gain,
