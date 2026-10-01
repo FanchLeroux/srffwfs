@@ -346,7 +346,7 @@ eigen_control_basis = full_eigen_control_basis[:, :n_controlled_modes]
 
 # %% accessible fourier plane illustration attempt
 
-modal_cutoff = n_controlled_modes
+modal_cutoff = pyramid_sr.nSignal // 4  # number of controlled modes (modal cutoff)
 zero_padding_factor = 2
 
 pupil_padded = pad_array(tel.pupil, zero_padding_factor)
