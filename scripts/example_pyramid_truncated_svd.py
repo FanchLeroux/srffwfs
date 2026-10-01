@@ -196,6 +196,21 @@ pupil_shifts_horizontal = [
     ],
 ]
 
+pupil_shifts_vertical = [
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+    [
+        0.25,
+        0.25,
+        -0.25,
+        -0.25,
+    ],
+]
+
 pupil_shifts_quincux = [
     [
         0.25,
@@ -383,11 +398,7 @@ full_eigen_control_basis, s_eigen_control_basis = compute_eigen_control_basis(
 
 # %% plot singular values of the eigen control basis to choose the controlmodal cutoff
 
-n_controlled_modes = (
-    pyramid_sr.nSignal // 2
-)  # number of controlled modes (modal cutoff)
-
-n_controlled_modes = 600
+n_controlled_modes = 400  # number of controlled modes (modal cutoff)
 
 plt.figure()
 plt.plot(s_eigen_control_basis)
@@ -416,7 +427,6 @@ eigen_control_basis = full_eigen_control_basis[:, :n_controlled_modes]
 
 # %% accessible fourier plane illustration attempt
 
-modal_cutoff = pyramid_sr.nSignal // 4  # number of controlled modes (modal cutoff)
 zero_padding_factor = 2
 
 pupil_padded = pad_array(tel.pupil, zero_padding_factor)
@@ -426,13 +436,13 @@ pupil_plane_field = np.zeros(
 focal_plane_irradiance = np.zeros(zero_padding_factor * np.array(tel.pupil.shape))
 
 pupil_fields = np.zeros(
-    (*pupil_plane_field.shape, modal_cutoff),
+    (*pupil_plane_field.shape, n_controlled_modes),
     dtype=full_eigen_control_basis.dtype,
 )
 
 pupil_fields[pupil_padded, :] = full_eigen_control_basis[
     tel.pupil.reshape(-1),
-    :modal_cutoff,
+    :n_controlled_modes,
 ]
 
 focal_plane_irradiance = np.sum(
