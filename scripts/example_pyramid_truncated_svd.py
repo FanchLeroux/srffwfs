@@ -211,6 +211,21 @@ pupil_shifts_vertical = [
     ],
 ]
 
+pupil_shifts_hv = [
+    [
+        0.25,
+        0.0,
+        -0.25,
+        0.0,
+    ],
+    [
+        0.0,
+        0.25,
+        0.0,
+        -0.25,
+    ],
+]
+
 pupil_shifts_quincux = [
     [
         0.25,
@@ -362,6 +377,7 @@ print(f"dx = {shift[1]:.3f} px")
 # %% sensitivity analysis - allows low/high order mode cutoff identification
 
 n_lo_modes_to_keep = int(np.round(np.pi * modulation**2))
+# n_lo_modes_to_keep = 0  # for standard svd
 
 interaction_matrix_rad_normalized = interaction_matrix * wavelength / (2 * np.pi)
 reference_intensities = pyramid_sr.referenceSignal
@@ -399,7 +415,7 @@ full_eigen_control_basis, s_eigen_control_basis = compute_eigen_control_basis(
 # %% plot singular values of the eigen control basis to choose the controlmodal cutoff
 
 n_controlled_modes = int(
-    pyramid_sr.nSignal / 3
+    0.5 * pyramid_sr.nSignal
 )  # number of controlled modes (modal cutoff)
 
 plt.figure()
