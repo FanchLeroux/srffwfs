@@ -166,16 +166,31 @@ reference_intensities_2d_no_sr = pyramid_sr.referenceSignal_2D
 
 # super resolved pyramid
 
-pupil_shifts_horizontal = [
+pupil_shifts_zeros = [
     [
-        0.5,
+        0.0,
         0.0,
         0.0,
         0.0,
     ],
     [
         0.0,
-        0.5,
+        0.0,
+        0.0,
+        0.0,
+    ],
+]
+
+pupil_shifts_horizontal = [
+    [
+        0.25,
+        0.25,
+        -0.25,
+        -0.25,
+    ],
+    [
+        0.0,
+        0.0,
         0.0,
         0.0,
     ],
@@ -196,7 +211,7 @@ pupil_shifts_quincux = [
     ],
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
-pupil_shifts = pupil_shifts_quincux  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
+pupil_shifts = pupil_shifts_zeros  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
 pyramid_sr.apply_shift_wfs(
     pupil_shifts[0], pupil_shifts[1], units="pixels"
 )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
@@ -243,6 +258,11 @@ calib_sr = InteractionMatrix(
 )
 
 interaction_matrix = calib_sr.D
+
+print(
+    f"Interaction matrix shape: {interaction_matrix.shape}\n"
+    f"Interaction matrix rank: {np.linalg.matrix_rank(interaction_matrix)}"
+)
 
 # %% Visualize interaction matrix
 
