@@ -14,7 +14,7 @@ from OOPAO.Telescope import Telescope
 from OOPAO.Atmosphere import Atmosphere
 from OOPAO.Source import Source
 from OOPAO.DeformableMirror import DeformableMirror
-from OOPAO.Pyramid import Pyramid
+from OOPAO.BioEdge import BioEdge
 from OOPAO.calibration.InteractionMatrix import InteractionMatrix
 
 from srffwfs.pattern import get_circular_pupil
@@ -65,10 +65,10 @@ n_actuator = 2 * n_subaperture  # number of actuators
 
 # ----------------------- WFS ---------------------- #
 
-modulation = 3.0  # [lambda/D] modulation radius or half grey width
+grey_width = 3.0  # [lambda/D] half grey width
 n_pix_separation = 10  # [pixel] separation ratio between the pupils
 light_threshold = (
-    0.3 if modulation > 0.0 else 0
+    0.3 if grey_width > 0.0 else 0
 )  # light threshold to select the valid pixels
 detector_photon_noise = False
 detector_read_out_noise = 0.0  # e- RMS
@@ -152,16 +152,17 @@ dm = DeformableMirror(tel, nSubap=n_actuator)
 # %% ----------------------- Pyramid ---------------------------- #
 
 # pyramid
-pyramid_sr = Pyramid(
+bioedge = BioEdge(
     nSubap=n_subaperture,
     telescope=tel,
-    modulation=modulation,
+    modulation=0.0,
+    grey_width=grey_width,
     lightRatio=light_threshold,
     n_pix_separation=n_pix_separation,
     postProcessing="fullFrame",
 )
 
-reference_intensities_2d_no_sr = pyramid_sr.referenceSignal_2D
+reference_intensities_2d_no_sr = bioedge.referenceSignal_2D
 
 # super resolved pyramid
 
@@ -241,29 +242,29 @@ pupil_shifts_quincux = [
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
 pupil_shifts = pupil_shifts_quincux  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
-pyramid_sr.apply_shift_wfs(
+bioedge.apply_shift_wfs(
     pupil_shifts[0], pupil_shifts[1], units="pixels"
 )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
-pyramid_sr.modulation = modulation  # update reference intensities etc.
-reference_intensities_2d_sr = pyramid_sr.referenceSignal_2D
+bioedge.modulation = 0.0  # update reference intensities etc.
+reference_intensities_2d_sr = bioedge.referenceSignal_2D
 
 plt.figure()
 plt.imshow(reference_intensities_2d_sr - reference_intensities_2d_no_sr)
 plt.title("reference intensities difference\nsuper resolved pyramid - pyramid")
 
-pupil_1 = deepcopy(pyramid_sr.valid_signal_2D)
+pupil_1 = deepcopy(bioedge.valid_signal_2D)
 pupil_1[pupil_1.shape[0] // 2 :, :] = 0
 pupil_1[:, pupil_1.shape[1] // 2 :] = 0
 
-pupil_2 = deepcopy(pyramid_sr.valid_signal_2D)
+pupil_2 = deepcopy(bioedge.valid_signal_2D)
 pupil_2[pupil_2.shape[0] // 2 :, :] = 0
 pupil_2[:, : pupil_2.shape[1] // 2] = 0
 
-pupil_3 = deepcopy(pyramid_sr.valid_signal_2D)
+pupil_3 = deepcopy(bioedge.valid_signal_2D)
 pupil_3[: pupil_3.shape[0] // 2, :] = 0
 pupil_3[:, pupil_3.shape[1] // 2 :] = 0
 
-pupil_4 = deepcopy(pyramid_sr.valid_signal_2D)
+pupil_4 = deepcopy(bioedge.valid_signal_2D)
 pupil_4[: pupil_4.shape[0] // 2, :] = 0
 pupil_4[:, : pupil_4.shape[1] // 2] = 0
 
@@ -304,7 +305,7 @@ calib_sr = InteractionMatrix(
     ngs,
     tel,
     first_calibration_modal_dm,
-    pyramid_sr,
+    bioedge,
     M2C=np.diag(np.ones(first_calibration_modal_dm.nValidAct)),
     stroke=stroke,
     single_pass=single_pass,
@@ -321,7 +322,7 @@ print(
 
 # %% choose number of controlled modes
 
-n_modes = int(2.0 * pyramid_sr.nSignal / 4)  # number of controlled modes
+n_modes = int(2.0 * bioedge.nSignal / 4)  # number of controlled modes
 
 # %% compute classic lse reconstructor
 
@@ -371,7 +372,7 @@ seed = 12  # seed for atmosphere computation
     ngs,
     atm,
     first_calibration_modal_dm,
-    pyramid_sr,
+    bioedge,
     reconstructor_lse,
     loop_gain,
     n_iter,
@@ -393,7 +394,7 @@ long_exposure_psf_lse_sr = np.sum(short_exposure_psf_lse_sr[:, :, 100:], axis=2)
 
 # noise propagation
 plt.figure()
-plt.plot(np.diag(reconstructor_lse @ reconstructor_lse.T) / pyramid_sr.nSignal)
+plt.plot(np.diag(reconstructor_lse @ reconstructor_lse.T) / bioedge.nSignal)
 plt.yscale("log")
 plt.title("modal uniform noise propagation")
 plt.xlabel("# modes")
