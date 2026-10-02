@@ -70,7 +70,7 @@ n_pix_separation = 10  # [pixel] separation ratio between the pupils
 light_threshold = (
     0.3 if grey_width > 0.0 else 0
 )  # light threshold to select the valid pixels
-detector_photon_noise = True
+detector_photon_noise = False
 detector_read_out_noise = 0.0  # e- RMS
 
 # super resolution
@@ -242,7 +242,9 @@ pupil_shifts_quincux = [
     ],
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
-pupil_shifts = pupil_shifts_quincux  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
+pupil_shifts = (
+    pupil_shifts_hv  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
+)
 bioedge.apply_shift_wfs(
     pupil_shifts[0], pupil_shifts[1], units="pixels"
 )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
@@ -323,7 +325,7 @@ print(
 
 # %% choose number of controlled modes
 
-n_modes = int(2.0 * bioedge.nSignal / 4)  # number of controlled modes
+n_modes = int(3.0 * bioedge.nSignal / 4)  # number of controlled modes
 
 # %% compute classic lse reconstructor
 
