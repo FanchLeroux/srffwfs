@@ -62,7 +62,7 @@ pupil_oversampling_factor: int = (
 )
 # ------------------------ DM ---------------------- #
 
-n_actuator = n_subaperture  # number of actuators
+n_actuator = 2 * n_subaperture  # number of actuators
 
 # ----------------------- WFS ---------------------- #
 
@@ -552,10 +552,16 @@ reconstructor_lse_sr = np.linalg.pinv(interaction_matrix_eigen_basis)
 
 U, s, Vh = np.linalg.svd(interaction_matrix @ c_phi @ interaction_matrix.T)
 
-tol = 1e-10 * s[0]
+tol = 1e-3 * s[0]
 s_inv = np.where(s > tol, 1.0 / s, 0.0)
 
 reconstructor_map_sr = c_phi @ interaction_matrix.T @ (Vh.T * s_inv) @ U.T
+
+plt.figure()
+plt.plot(s / s.max(), label="singular values")
+plt.axhline(y=tol / s.max(), color="r", linestyle="--", label="tolerance")
+plt.title("SVD of the interaction matrix")
+plt.yscale("log")
 
 # %% SEED
 
