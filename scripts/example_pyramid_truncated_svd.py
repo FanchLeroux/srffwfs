@@ -62,7 +62,7 @@ pupil_oversampling_factor: int = (
 )
 # ------------------------ DM ---------------------- #
 
-n_actuator = 2 * n_subaperture  # number of actuators
+n_actuator = n_subaperture  # number of actuators
 
 # ----------------------- WFS ---------------------- #
 
@@ -415,7 +415,7 @@ full_eigen_control_basis, s_eigen_control_basis = compute_eigen_control_basis(
 # %% plot singular values of the eigen control basis to choose the controlmodal cutoff
 
 n_controlled_modes = int(
-    0.5 * pyramid_sr.nSignal
+    0.25 * pyramid_sr.nSignal
 )  # number of controlled modes (modal cutoff)
 
 plt.figure()
@@ -549,11 +549,12 @@ ax_sensitivity.set_title("eigen control basis sensitivity analysis")
 reconstructor_lse_sr = np.linalg.pinv(interaction_matrix_eigen_basis)
 
 # %% map
-# reconstructor_lse_sr = (
-#     c_phi
-#     @ interaction_matrix.T
-#     @ np.linalg.pinv(interaction_matrix @ c_phi @ interaction_matrix.T)
-# )
+
+reconstructor_map_sr = (
+    c_phi
+    @ interaction_matrix.T
+    @ np.linalg.pinv(interaction_matrix @ c_phi @ interaction_matrix.T)
+)
 
 # %% SEED
 
@@ -632,6 +633,83 @@ plt.savefig(fig_dir / "strehls.png", bbox_inches="tight")
 plt.figure()
 plt.imshow(np.log(long_exposure_psf_lse_sr), norm="linear", cmap="inferno")
 plt.title(f"long_exposure_psf_lse_sr\nPyramid - {n_controlled_modes} controlled modes")
+plt.savefig(fig_dir / "long_exposure_psf.png", bbox_inches="tight")
+
+plt.show()
+
+# %% Close the loop - map - SR
+
+(
+    total_map_sr,
+    residual_map_sr,
+    strehl_map_sr,
+    dm_coefs_map_sr,
+    turbulence_phase_screens_map_sr,
+    residual_phase_screens_map_sr,
+    wfs_frames_map_sr,
+    wfs_signals_map_sr,
+    short_exposure_psf_map_sr,
+) = close_the_loop(
+    tel,
+    ngs,
+    atm,
+    first_calibration_modal_dm,
+    pyramid_sr,
+    reconstructor_map_sr,
+    loop_gain,
+    n_iter,
+    delay=delay,
+    photon_noise=detector_photon_noise,
+    read_out_noise=detector_read_out_noise,
+    polc=True,
+    interaction_matrix=interaction_matrix,
+    seed=seed,
+    save_telemetry=True,
+    save_psf=True,
+)
+
+# %% post processing
+
+long_exposure_psf_map_sr = np.sum(short_exposure_psf_map_sr[:, :, 100:], axis=2)
+
+# %% plots
+
+# noise propagation
+plt.figure()
+plt.plot(np.diag(reconstructor_map_sr @ reconstructor_map_sr.T) / pyramid_sr.nSignal)
+plt.yscale("log")
+plt.title("modal uniform noise propagation")
+plt.xlabel("# modes")
+plt.savefig(fig_dir / "noise_propagation.png", bbox_inches="tight")
+
+# %%
+
+# residuals
+plt.figure()
+plt.plot(total_map_sr, label="total_map_sr")
+plt.plot(residual_map_sr, label="residual_map_sr")
+plt.xlabel("loop iteration")
+plt.ylabel("residual phase RMS [nm]")
+plt.title("Closed Loop residuals")
+plt.legend()
+plt.savefig(fig_dir / "residuals.png", bbox_inches="tight")
+
+# %%
+
+# strehls
+plt.figure()
+plt.plot(strehl_map_sr, label="strehl_map_sr")
+plt.ylabel("strehl phase RMS [nm]")
+plt.title("Closed Loop strehls")
+plt.legend()
+plt.savefig(fig_dir / "strehls.png", bbox_inches="tight")
+
+# %%
+
+# long exposure PSF
+plt.figure()
+plt.imshow(np.log(long_exposure_psf_map_sr), norm="linear", cmap="inferno")
+plt.title(f"long_exposure_psf_map_sr\nPyramid - {n_controlled_modes} controlled modes")
 plt.savefig(fig_dir / "long_exposure_psf.png", bbox_inches="tight")
 
 plt.show()
