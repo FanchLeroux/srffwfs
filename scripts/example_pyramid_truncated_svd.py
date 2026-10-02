@@ -412,7 +412,7 @@ full_eigen_control_basis, s_eigen_control_basis = compute_eigen_control_basis(
     calibration_basis, interaction_matrix, n_lo_modes_to_keep
 )
 
-# %% plot singular values of the eigen control basis to choose the controlmodal cutoff
+# %% plot singular values of the eigen control basis to choose the control modal cutoff
 
 n_controlled_modes = int(
     0.25 * pyramid_sr.nSignal
@@ -550,11 +550,12 @@ reconstructor_lse_sr = np.linalg.pinv(interaction_matrix_eigen_basis)
 
 # %% map
 
-reconstructor_map_sr = (
-    c_phi
-    @ interaction_matrix.T
-    @ np.linalg.pinv(interaction_matrix @ c_phi @ interaction_matrix.T)
-)
+U, s, Vh = np.linalg.svd(interaction_matrix @ c_phi @ interaction_matrix.T)
+
+tol = 1e-10 * s[0]
+s_inv = np.where(s > tol, 1.0 / s, 0.0)
+
+reconstructor_map_sr = c_phi @ interaction_matrix.T @ (Vh.T * s_inv) @ U.T
 
 # %% SEED
 
@@ -699,6 +700,7 @@ plt.savefig(fig_dir / "residuals.png", bbox_inches="tight")
 # strehls
 plt.figure()
 plt.plot(strehl_map_sr, label="strehl_map_sr")
+plt.plot(strehl_lse_sr, label="strehl_lse_sr")
 plt.ylabel("strehl phase RMS [nm]")
 plt.title("Closed Loop strehls")
 plt.legend()
