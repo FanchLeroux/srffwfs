@@ -149,7 +149,7 @@ atm = Atmosphere(
 
 dm = DeformableMirror(tel, nSubap=n_actuator)
 
-# %% ----------------------- Pyramid ---------------------------- #
+# %% ----------------------- Bi-O edge ---------------------------- #
 
 # pyramid
 bioedge = BioEdge(
@@ -164,7 +164,8 @@ bioedge = BioEdge(
 
 reference_intensities_2d_no_sr = bioedge.referenceSignal_2D
 
-# super resolved pyramid
+# super resolved bioedge. Each row of pupil is one bioedge filter
+# quadrant numbering: 4, 3, 2, 1 (top left, top right, bottom left, bottom right)
 
 pupil_shifts_zeros = [
     [
@@ -184,8 +185,8 @@ pupil_shifts_zeros = [
 pupil_shifts_horizontal = [
     [
         0.25,
-        0.25,
         -0.25,
+        0.25,
         -0.25,
     ],
     [
@@ -205,8 +206,8 @@ pupil_shifts_vertical = [
     ],
     [
         0.25,
-        0.25,
         -0.25,
+        0.25,
         -0.25,
     ],
 ]
@@ -230,13 +231,13 @@ pupil_shifts_quincux = [
     [
         0.25,
         -0.25,
-        -0.25,
         0.25,
+        -0.25,
     ],
     [
-        -0.25,
-        -0.25,
         0.25,
+        -0.25,
+        -0.25,
         0.25,
     ],
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
@@ -431,7 +432,7 @@ plt.imshow(
     norm="linear",
     cmap="inferno",
 )
-plt.title(f"long_exposure_psf_lse_sr\nPyramid - {n_modes} controlled modes")
+plt.title(f"long_exposure_psf_lse_sr\nBi-O edge - {n_modes} controlled modes")
 plt.savefig(fig_dir / "long_exposure_psf.png", bbox_inches="tight")
 
 plt.show()
