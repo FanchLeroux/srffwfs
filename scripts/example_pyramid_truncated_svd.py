@@ -241,7 +241,9 @@ pupil_shifts_quincux = [
     ],
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
-pupil_shifts = pupil_shifts_vertical  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
+pupil_shifts = (
+    pupil_shifts_hv  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
+)
 pyramid_sr.apply_shift_wfs(
     pupil_shifts[0], pupil_shifts[1], units="pixels"
 )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
@@ -415,7 +417,7 @@ full_eigen_control_basis, s_eigen_control_basis = compute_eigen_control_basis(
 # %% plot singular values of the eigen control basis to choose the control modal cutoff
 
 n_controlled_modes = int(
-    0.25 * pyramid_sr.nSignal
+    0.5 * pyramid_sr.nSignal
 )  # number of controlled modes (modal cutoff)
 
 plt.figure()
@@ -552,7 +554,7 @@ reconstructor_lse_sr = np.linalg.pinv(interaction_matrix_eigen_basis)
 
 U, s, Vh = np.linalg.svd(interaction_matrix @ c_phi @ interaction_matrix.T)
 
-tol = 1e-3 * s[0]
+tol = 5e-4 * s[0]
 s_inv = np.where(s > tol, 1.0 / s, 0.0)
 
 reconstructor_map_sr = c_phi @ interaction_matrix.T @ (Vh.T * s_inv) @ U.T
@@ -560,7 +562,7 @@ reconstructor_map_sr = c_phi @ interaction_matrix.T @ (Vh.T * s_inv) @ U.T
 plt.figure()
 plt.plot(s / s.max(), label="singular values")
 plt.axhline(y=tol / s.max(), color="r", linestyle="--", label="tolerance")
-plt.title("SVD of the interaction matrix")
+plt.title("SVD of the interaction matrix weighted by the phase covariance matrix")
 plt.yscale("log")
 
 # %% SEED
