@@ -40,7 +40,7 @@ magnitude = 8  # magnitude of the guide star
 
 # ------------------ ATMOSPHERE ----------------- #
 
-r0 = 0.1  # [m] value of r0 at 500 nm
+r0 = 0.05  # [m] value of r0 at 500 nm
 external_scale = 30  # [m] value of L0 in the visibile
 fractional_r0 = [0.45, 0.1, 0.1, 0.25, 0.1]  # Cn2 profile (percentage)
 wind_speed = [5, 4, 8, 10, 2]  # [m.s-1] wind speed of layers
@@ -49,7 +49,7 @@ altitude = [0, 1000, 5000, 10000, 12000]  # [m] altitude of layers
 
 # ------------------- TELESCOPE ------------------ #
 
-diameter = 2  # [m] telescope diameter
+diameter = 1  # [m] telescope diameter
 n_subaperture = 8  # number of WFS subaperture along the telescope diameter
 n_pixel_per_subaperture = (
     16  # [pixel] sampling of the WFS subapertures in telescope pupil space
@@ -241,9 +241,7 @@ pupil_shifts_quincux = [
     ],
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
-pupil_shifts = (
-    pupil_shifts_hv  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
-)
+pupil_shifts = pupil_shifts_zeros  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
 pyramid_sr.apply_shift_wfs(
     pupil_shifts[0], pupil_shifts[1], units="pixels"
 )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
