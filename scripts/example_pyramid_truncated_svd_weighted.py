@@ -328,7 +328,7 @@ A = interaction_matrix @ L
 
 U, s, Vh = np.linalg.svd(A, full_matrices=False)
 
-n_modes = int(pyramid_sr.nSignal / 4)  # number of controlled modes
+n_modes = int(pyramid_sr.nSignal / 2)  # number of controlled modes
 
 U_k = U[:, :n_modes]
 s_k = s[:n_modes]
@@ -377,7 +377,7 @@ seed = 12  # seed for atmosphere computation
     delay=delay,
     photon_noise=detector_photon_noise,
     read_out_noise=detector_read_out_noise,
-    polc=True,
+    polc=False,
     interaction_matrix=interaction_matrix,
     seed=seed,
     save_telemetry=True,
@@ -424,7 +424,11 @@ plt.savefig(fig_dir / "strehls.png", bbox_inches="tight")
 
 # long exposure PSF
 plt.figure()
-plt.imshow(np.log(long_exposure_psf_lse_sr), norm="linear", cmap="inferno")
+plt.imshow(
+    crop_array(np.log(long_exposure_psf_lse_sr), 100),
+    norm="linear",
+    cmap="inferno",
+)
 plt.title(f"long_exposure_psf_lse_sr\nPyramid - {n_modes} controlled modes")
 plt.savefig(fig_dir / "long_exposure_psf.png", bbox_inches="tight")
 
