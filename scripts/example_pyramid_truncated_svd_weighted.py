@@ -241,7 +241,7 @@ pupil_shifts_quincux = [
     ],
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
-pupil_shifts = pupil_shifts_horizontal  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
+pupil_shifts = pupil_shifts_quincux  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
 pyramid_sr.apply_shift_wfs(
     pupil_shifts[0], pupil_shifts[1], units="pixels"
 )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
@@ -328,13 +328,26 @@ A = interaction_matrix @ L
 
 U, s, Vh = np.linalg.svd(A, full_matrices=False)
 
-n_modes = 100
+n_modes = int(pyramid_sr.nSignal / 4)  # number of controlled modes
 
 U_k = U[:, :n_modes]
 s_k = s[:n_modes]
 Vh_k = Vh[:n_modes, :]
 
 reconstructor_lse = L @ Vh_k.T / s_k @ U_k.T
+
+# %% reconstructor lse classic
+
+reconstructor_lse = np.linalg.pinv(
+    interaction_matrix[:, :n_modes]
+)  # unweighted LSE reconstructor
+reconstructor_lse = np.concatenate(
+    (
+        reconstructor_lse,
+        np.zeros((interaction_matrix.shape[1] - n_modes, reconstructor_lse.shape[1])),
+    ),
+    axis=0,
+)  # pad the reconstructor with zeros to match the number of WFS signals
 
 # %% SEED
 
@@ -416,3 +429,5 @@ plt.title(f"long_exposure_psf_lse_sr\nPyramid - {n_modes} controlled modes")
 plt.savefig(fig_dir / "long_exposure_psf.png", bbox_inches="tight")
 
 plt.show()
+
+# %%
