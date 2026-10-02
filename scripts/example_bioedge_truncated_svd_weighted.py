@@ -35,7 +35,7 @@ fig_dir = config.root_dir / "outputs"
 # phot.R4 = [0.670e-6, 0.300e-6, 7.66e12]
 wavelength = 670e-9  # [m] wavelength of the guide star
 optical_band = "R4"  # optical band of the guide star
-magnitude = 12  # magnitude of the guide star
+magnitude = 10  # magnitude of the guide star
 
 # ------------------ ATMOSPHERE ----------------- #
 
@@ -70,7 +70,7 @@ n_pix_separation = 10  # [pixel] separation ratio between the pupils
 light_threshold = (
     0.3 if grey_width > 0.0 else 0
 )  # light threshold to select the valid pixels
-detector_photon_noise = False
+detector_photon_noise = True
 detector_read_out_noise = 0.0  # e- RMS
 
 # super resolution
@@ -323,7 +323,7 @@ print(
 
 # %% choose number of controlled modes
 
-n_modes = int(0.85 * 4.0 * bioedge.nSignal / 4)  # number of controlled modes
+n_modes = int(2.0 * bioedge.nSignal / 4)  # number of controlled modes
 
 # %% compute classic lse reconstructor
 
