@@ -549,11 +549,11 @@ ax_sensitivity.set_title("eigen control basis sensitivity analysis")
 reconstructor_lse_sr = np.linalg.pinv(interaction_matrix_eigen_basis)
 
 # %% map
-reconstructor_lse_sr = (
-    c_phi
-    @ interaction_matrix.T
-    @ np.linalg.pinv(interaction_matrix @ c_phi @ interaction_matrix.T)
-)
+# reconstructor_lse_sr = (
+#     c_phi
+#     @ interaction_matrix.T
+#     @ np.linalg.pinv(interaction_matrix @ c_phi @ interaction_matrix.T)
+# )
 
 # %% SEED
 
@@ -575,7 +575,7 @@ seed = 12  # seed for atmosphere computation
     tel,
     ngs,
     atm,
-    first_calibration_modal_dm,
+    eigen_modal_dm,
     pyramid_sr,
     reconstructor_lse_sr,
     loop_gain,
@@ -583,6 +583,8 @@ seed = 12  # seed for atmosphere computation
     delay=delay,
     photon_noise=detector_photon_noise,
     read_out_noise=detector_read_out_noise,
+    polc=True,
+    interaction_matrix=interaction_matrix_eigen_basis,
     seed=seed,
     save_telemetry=True,
     save_psf=True,

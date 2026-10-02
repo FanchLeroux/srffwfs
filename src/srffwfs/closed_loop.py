@@ -15,6 +15,8 @@ def close_the_loop(
     photon_noise=False,
     read_out_noise=0.0,
     seed=0,
+    polc=False,
+    interaction_matrix=None,
     save_telemetry=False,
     save_psf=False,
 ):
@@ -84,7 +86,20 @@ def close_the_loop(
         residual[k] = np.std(tel.OPD[np.where(tel.pupil > 0)]) * 1e9  # [nm]
         strehl[k] = np.exp(-np.var(tel.src.phase[np.where(tel.pupil > 0)]))
 
-        dm.coefs = dm.coefs - loop_gain * reconstructor @ buffer_wfs_measure[:, 0]
+        if polc:
+            if interaction_matrix is None:
+                raise ValueError(
+                    "Interaction matrix must be provided for POLC. Please provide it as an argument."
+                )
+            else:
+                pseudo_open_loop_measures = (
+                    buffer_wfs_measure[:, 0] - interaction_matrix @ dm.coefs
+                )
+                dm.coefs = (
+                    1 - loop_gain
+                ) * dm.coefs - loop_gain * reconstructor @ pseudo_open_loop_measures
+        else:
+            dm.coefs = dm.coefs - loop_gain * reconstructor @ buffer_wfs_measure[:, 0]
 
         if save_psf:
 
