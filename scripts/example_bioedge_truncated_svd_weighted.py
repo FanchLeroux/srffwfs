@@ -242,9 +242,7 @@ pupil_shifts_quincux = [
     ],
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
-pupil_shifts = (
-    pupil_shifts_hv  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
-)
+pupil_shifts = pupil_shifts_quincux  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
 bioedge.apply_shift_wfs(
     pupil_shifts[0], pupil_shifts[1], units="pixels"
 )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
@@ -325,7 +323,7 @@ print(
 
 # %% choose number of controlled modes
 
-n_modes = int(3.0 * bioedge.nSignal / 4)  # number of controlled modes
+n_modes = int(0.85 * bioedge.nSignal) + 2  # number of controlled modes
 
 # %% compute classic lse reconstructor
 
@@ -342,7 +340,8 @@ reconstructor_lse = np.concatenate(
 
 # %% compute reconstructor with truncated SVD weightened by the phase covariance matrix
 
-L = np.linalg.cholesky(c_phi)
+# L = np.linalg.cholesky(c_phi)
+L = np.diag(np.diag(c_phi) ** 0.5)
 
 A = interaction_matrix @ L
 
