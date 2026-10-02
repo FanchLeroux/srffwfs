@@ -323,7 +323,7 @@ print(
 
 # %% choose number of controlled modes
 
-n_modes = int(2.0 * bioedge.nSignal / 4)  # number of controlled modes
+n_modes = int(0.85 * 4.0 * bioedge.nSignal / 4)  # number of controlled modes
 
 # %% compute classic lse reconstructor
 
