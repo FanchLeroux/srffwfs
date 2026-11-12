@@ -240,198 +240,214 @@ pupil_shifts_quincux = [
     ],
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
-pupil_shifts = pupil_shifts_quincux  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
-pyramid_sr.apply_shift_wfs(
-    pupil_shifts[0], pupil_shifts[1], units="pixels"
-)  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
-pyramid_sr.modulation = modulation  # update reference intensities etc.
-reference_intensities_2d_sr = pyramid_sr.referenceSignal_2D
+pupil_shifts_dict = {
+    "zeros": pupil_shifts_zeros,
+    "horizontal": pupil_shifts_horizontal,
+    "vertical": pupil_shifts_vertical,
+    "hv": pupil_shifts_hv,
+    "quincux": pupil_shifts_quincux,
+}
 
-plt.figure()
-plt.imshow(reference_intensities_2d_sr - reference_intensities_2d_no_sr)
-plt.title("reference intensities difference\nsuper resolved pyramid - pyramid")
+# %%
 
-pupil_1 = deepcopy(pyramid_sr.valid_signal_2D)
-pupil_1[pupil_1.shape[0] // 2 :, :] = 0
-pupil_1[:, pupil_1.shape[1] // 2 :] = 0
+for key, value in pupil_shifts_dict.items():
 
-pupil_2 = deepcopy(pyramid_sr.valid_signal_2D)
-pupil_2[pupil_2.shape[0] // 2 :, :] = 0
-pupil_2[:, : pupil_2.shape[1] // 2] = 0
+    pupil_shifts = (
+        value  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
+    )
+    pyramid_sr.apply_shift_wfs(
+        pupil_shifts[0], pupil_shifts[1], units="pixels"
+    )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
+    pyramid_sr.modulation = modulation  # update reference intensities etc.
+    reference_intensities_2d_sr = pyramid_sr.referenceSignal_2D
 
-pupil_3 = deepcopy(pyramid_sr.valid_signal_2D)
-pupil_3[: pupil_3.shape[0] // 2, :] = 0
-pupil_3[:, pupil_3.shape[1] // 2 :] = 0
+    plt.figure()
+    plt.imshow(reference_intensities_2d_sr - reference_intensities_2d_no_sr)
+    plt.title(
+        f"reference intensities difference\nsuper resolved pyramid - pyramid\n{key} shifts"
+    )
 
-pupil_4 = deepcopy(pyramid_sr.valid_signal_2D)
-pupil_4[: pupil_4.shape[0] // 2, :] = 0
-pupil_4[:, : pupil_4.shape[1] // 2] = 0
+    pupil_1 = deepcopy(pyramid_sr.valid_signal_2D)
+    pupil_1[pupil_1.shape[0] // 2 :, :] = 0
+    pupil_1[:, pupil_1.shape[1] // 2 :] = 0
 
-fig, axs = plt.subplots(2, 2)
-axs[0, 0].imshow(pupil_1)
-axs[0, 0].set_title("Pupil 1")
-axs[0, 1].imshow(pupil_2)
-axs[0, 1].set_title("Pupil 2")
-axs[1, 0].imshow(pupil_3)
-axs[1, 0].set_title("Pupil 3")
-axs[1, 1].imshow(pupil_4)
-axs[1, 1].set_title("Pupil 4")
+    pupil_2 = deepcopy(pyramid_sr.valid_signal_2D)
+    pupil_2[pupil_2.shape[0] // 2 :, :] = 0
+    pupil_2[:, : pupil_2.shape[1] // 2] = 0
 
-# %% ------------------------- MODAL BASIS -------------------------------
+    pupil_3 = deepcopy(pyramid_sr.valid_signal_2D)
+    pupil_3[: pupil_3.shape[0] // 2, :] = 0
+    pupil_3[:, pupil_3.shape[1] // 2 :] = 0
 
-if modal_basis == "KL":
-    m2c, c_phi = compute_KL_basis(tel, atm, dm, return_covariance=True)
-    ngs**tel  # reset
+    pupil_4 = deepcopy(pyramid_sr.valid_signal_2D)
+    pupil_4[: pupil_4.shape[0] // 2, :] = 0
+    pupil_4[:, : pupil_4.shape[1] // 2] = 0
 
-elif modal_basis == "poke":
-    m2c = np.identity(dm.nValidAct)
+    fig, axs = plt.subplots(2, 2)
+    axs[0, 0].imshow(pupil_1)
+    axs[0, 0].set_title("Pupil 1")
+    axs[0, 1].imshow(pupil_2)
+    axs[0, 1].set_title("Pupil 2")
+    axs[1, 0].imshow(pupil_3)
+    axs[1, 0].set_title("Pupil 3")
+    axs[1, 1].imshow(pupil_4)
+    axs[1, 1].set_title("Pupil 4")
 
-# %% extract calibration basis
+    # ------------------------- MODAL BASIS -------------------------------
 
-influence_functions = dm.modes
-calibration_basis = influence_functions @ m2c
-calibration_basis = tel.pupil.reshape(-1, 1) * calibration_basis  # apply pupil mask
+    if modal_basis == "KL":
+        m2c, c_phi = compute_KL_basis(tel, atm, dm, return_covariance=True)
+        ngs**tel  # reset
 
-# %% -------------------------   Modal  DM   ----------------------------------
+    elif modal_basis == "poke":
+        m2c = np.identity(dm.nValidAct)
 
-first_calibration_modal_dm = DeformableMirror(
-    tel, nSubap=n_actuator, modes=calibration_basis
-)
+    # extract calibration basis
 
-# %% calibration
+    influence_functions = dm.modes
+    calibration_basis = influence_functions @ m2c
+    calibration_basis = tel.pupil.reshape(-1, 1) * calibration_basis  # apply pupil mask
 
-calib_sr = InteractionMatrix(
-    ngs,
-    tel,
-    first_calibration_modal_dm,
-    pyramid_sr,
-    M2C=np.diag(np.ones(first_calibration_modal_dm.nValidAct)),
-    stroke=stroke,
-    single_pass=single_pass,
-    noise="off",
-    display=True,
-)
+    # -------------------------   Modal  DM   ----------------------------------
 
-interaction_matrix = calib_sr.D
+    first_calibration_modal_dm = DeformableMirror(
+        tel, nSubap=n_actuator, modes=calibration_basis
+    )
 
-print(
-    f"Interaction matrix shape: {interaction_matrix.shape}\n"
-    f"Interaction matrix rank: {np.linalg.matrix_rank(interaction_matrix)}"
-)
+    # calibration
 
-# %% choose number of controlled modes
+    calib_sr = InteractionMatrix(
+        ngs,
+        tel,
+        first_calibration_modal_dm,
+        pyramid_sr,
+        M2C=np.diag(np.ones(first_calibration_modal_dm.nValidAct)),
+        stroke=stroke,
+        single_pass=single_pass,
+        noise="off",
+        display=True,
+    )
 
-n_modes = int(2.0 * pyramid_sr.nSignal / 4)  # number of controlled modes
+    interaction_matrix = calib_sr.D
 
-# %% compute classic lse reconstructor
+    print(
+        f"Interaction matrix shape: {interaction_matrix.shape}\n"
+        f"Interaction matrix rank: {np.linalg.matrix_rank(interaction_matrix)}"
+    )
 
-reconstructor_lse = np.linalg.pinv(
-    interaction_matrix[:, :n_modes]
-)  # unweighted LSE reconstructor
-reconstructor_lse = np.concatenate(
+    # choose number of controlled modes
+
+    n_modes = int(2.0 * pyramid_sr.nSignal / 4)  # number of controlled modes
+
+    # # compute classic lse reconstructor
+
+    # reconstructor_lse = np.linalg.pinv(
+    #     interaction_matrix[:, :n_modes]
+    # )  # unweighted LSE reconstructor
+    # reconstructor_lse = np.concatenate(
+    #     (
+    #         reconstructor_lse,
+    #         np.zeros(
+    #             (interaction_matrix.shape[1] - n_modes, reconstructor_lse.shape[1])
+    #         ),
+    #     ),
+    #     axis=0,
+    # )  # pad the reconstructor with zeros to match the number of WFS signals
+
+    # compute reconstructor with truncated SVD weightened by the phase covariance matrix
+
+    L = np.linalg.cholesky(c_phi)
+
+    A = interaction_matrix @ L
+
+    U, s, Vh = np.linalg.svd(A, full_matrices=False)
+
+    U_k = U[:, :n_modes]
+    s_k = s[:n_modes]
+    Vh_k = Vh[:n_modes, :]
+
+    reconstructor_lse = L @ Vh_k.T / s_k @ U_k.T
+
+    # SEED
+
+    seed = 12  # seed for atmosphere computation
+
+    # Close the loop - LSE - SR
+
     (
+        total_lse_sr,
+        residual_lse_sr,
+        strehl_lse_sr,
+        dm_coefs_lse_sr,
+        turbulence_phase_screens_lse_sr,
+        residual_phase_screens_lse_sr,
+        wfs_frames_lse_sr,
+        wfs_signals_lse_sr,
+        short_exposure_psf_lse_sr,
+    ) = close_the_loop(
+        tel,
+        ngs,
+        atm,
+        first_calibration_modal_dm,
+        pyramid_sr,
         reconstructor_lse,
-        np.zeros((interaction_matrix.shape[1] - n_modes, reconstructor_lse.shape[1])),
-    ),
-    axis=0,
-)  # pad the reconstructor with zeros to match the number of WFS signals
+        loop_gain,
+        n_iter,
+        delay=delay,
+        photon_noise=detector_photon_noise,
+        read_out_noise=detector_read_out_noise,
+        polc=False,
+        interaction_matrix=interaction_matrix,
+        seed=seed,
+        save_telemetry=True,
+        save_psf=True,
+    )
 
-# %% compute reconstructor with truncated SVD weightened by the phase covariance matrix
+    # post processing
 
-L = np.linalg.cholesky(c_phi)
+    long_exposure_psf_lse_sr = np.sum(short_exposure_psf_lse_sr[:, :, 100:], axis=2)
 
-A = interaction_matrix @ L
+    # plots
 
-U, s, Vh = np.linalg.svd(A, full_matrices=False)
+    # noise propagation
+    plt.figure()
+    plt.plot(np.diag(reconstructor_lse @ reconstructor_lse.T) / pyramid_sr.nSignal)
+    plt.yscale("log")
+    plt.title(f"modal uniform noise propagation\n{key} shifts")
+    plt.xlabel("# modes")
+    plt.savefig(fig_dir / "noise_propagation.png", bbox_inches="tight")
 
-U_k = U[:, :n_modes]
-s_k = s[:n_modes]
-Vh_k = Vh[:n_modes, :]
+    # residuals
+    plt.figure()
+    plt.plot(total_lse_sr, label="total_lse_sr")
+    plt.plot(residual_lse_sr, label="residual_lse_sr")
+    plt.xlabel("loop iteration")
+    plt.ylabel("residual phase RMS [nm]")
+    plt.title(f"Closed Loop residuals\n{key} shifts")
+    plt.legend()
+    plt.savefig(fig_dir / "residuals.png", bbox_inches="tight")
 
-reconstructor_lse = L @ Vh_k.T / s_k @ U_k.T
+    # strehls
+    plt.figure()
+    plt.plot(strehl_lse_sr, label="strehl_lse_sr")
+    plt.ylabel("strehl phase RMS [nm]")
+    plt.title(f"Closed Loop strehls\n{key} shifts")
+    plt.legend()
+    plt.savefig(fig_dir / "strehls.png", bbox_inches="tight")
 
-# %% SEED
-
-seed = 12  # seed for atmosphere computation
-
-# %% Close the loop - LSE - SR
-
-(
-    total_lse_sr,
-    residual_lse_sr,
-    strehl_lse_sr,
-    dm_coefs_lse_sr,
-    turbulence_phase_screens_lse_sr,
-    residual_phase_screens_lse_sr,
-    wfs_frames_lse_sr,
-    wfs_signals_lse_sr,
-    short_exposure_psf_lse_sr,
-) = close_the_loop(
-    tel,
-    ngs,
-    atm,
-    first_calibration_modal_dm,
-    pyramid_sr,
-    reconstructor_lse,
-    loop_gain,
-    n_iter,
-    delay=delay,
-    photon_noise=detector_photon_noise,
-    read_out_noise=detector_read_out_noise,
-    polc=False,
-    interaction_matrix=interaction_matrix,
-    seed=seed,
-    save_telemetry=True,
-    save_psf=True,
-)
-
-# %% post processing
-
-long_exposure_psf_lse_sr = np.sum(short_exposure_psf_lse_sr[:, :, 100:], axis=2)
-
-# %% plots
-
-# noise propagation
-plt.figure()
-plt.plot(np.diag(reconstructor_lse @ reconstructor_lse.T) / pyramid_sr.nSignal)
-plt.yscale("log")
-plt.title("modal uniform noise propagation")
-plt.xlabel("# modes")
-plt.savefig(fig_dir / "noise_propagation.png", bbox_inches="tight")
+    # long exposure PSF
+    plt.figure()
+    plt.imshow(
+        crop_array(np.log(long_exposure_psf_lse_sr), 100),
+        norm="linear",
+        cmap="inferno",
+    )
+    plt.title(
+        f"long_exposure_psf_lse_sr\nPyramid - {n_modes} controlled modes\n{key} shifts"
+    )
+    plt.savefig(fig_dir / f"long_exposure_psf{key}_shifts.png", bbox_inches="tight")
 
 # %%
-
-# residuals
-plt.figure()
-plt.plot(total_lse_sr, label="total_lse_sr")
-plt.plot(residual_lse_sr, label="residual_lse_sr")
-plt.xlabel("loop iteration")
-plt.ylabel("residual phase RMS [nm]")
-plt.title("Closed Loop residuals")
-plt.legend()
-plt.savefig(fig_dir / "residuals.png", bbox_inches="tight")
-
-# %%
-
-# strehls
-plt.figure()
-plt.plot(strehl_lse_sr, label="strehl_lse_sr")
-plt.ylabel("strehl phase RMS [nm]")
-plt.title("Closed Loop strehls")
-plt.legend()
-plt.savefig(fig_dir / "strehls.png", bbox_inches="tight")
-
-# %%
-
-# long exposure PSF
-plt.figure()
-plt.imshow(
-    crop_array(np.log(long_exposure_psf_lse_sr), 100),
-    norm="linear",
-    cmap="inferno",
-)
-plt.title(f"long_exposure_psf_lse_sr\nPyramid - {n_modes} controlled modes")
-plt.savefig(fig_dir / "long_exposure_psf.png", bbox_inches="tight")
 
 plt.show()
 
