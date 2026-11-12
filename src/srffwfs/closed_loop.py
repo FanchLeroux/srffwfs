@@ -212,15 +212,23 @@ def close_the_loop(
 
         atm.update()  # update the atmosphere
 
-        total[k] = np.std(tel.OPD[np.where(tel.pupil > 0)]) * 1e9  # [nm]
+        turbulence_phase_screen = tel.OPD.copy()  # save the turbulence phase screen
+        turbulence_phase_screen[np.where(tel.pupil > 0)] -= np.mean(
+            turbulence_phase_screen[np.where(tel.pupil > 0)]
+        )  # remove the piston
+        total[k] = (
+            np.std(turbulence_phase_screen[np.where(tel.pupil > 0)]) * 1e9
+        )  # [nm]
 
         if modal_projector is not None:
-            fitting_limited_phase_screens[:, k] = tel.OPD.flatten() - dm.modes @ (
-                modal_projector @ tel.OPD.flatten()
+            fitting_limited_phase_screens[
+                :, k
+            ] = turbulence_phase_screen.flatten() - dm.modes @ (
+                modal_projector @ turbulence_phase_screen.flatten()
             )
 
         if save_telemetry:
-            turbulence_phase_screens[:, :, k] = tel.OPD
+            turbulence_phase_screens[:, :, k] = turbulence_phase_screen
 
         ngs**atm * tel * dm * wfs  # propagation through the wfs branch
 
@@ -299,6 +307,9 @@ def close_the_loop(
 
     if save_psf:
         closed_loop_result.short_exposure_psf = short_exposure_psf
+
+    if modal_projector is not None:
+        closed_loop_result.fitting_limited_phase_screens = fitting_limited_phase_screens
 
     # return
     return closed_loop_result
