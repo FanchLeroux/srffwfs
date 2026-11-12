@@ -15,12 +15,13 @@ from OOPAO.Atmosphere import Atmosphere
 from OOPAO.Source import Source
 from OOPAO.DeformableMirror import DeformableMirror
 from OOPAO.Pyramid import Pyramid
+from OOPAO.Detector import Detector
 from OOPAO.calibration.InteractionMatrix import InteractionMatrix
 
 from srffwfs.pattern import get_circular_pupil
 from srffwfs.modal_bases.KL_basis import compute_KL_basis
 from srffwfs.sensitivity import compute_photon_noise_sensitivity
-from srffwfs.closed_loop import close_the_loop
+from srffwfs.closed_loop import close_the_loop, ClosedLoopResult
 from srffwfs.miscellaneous import pad_array, crop_array
 
 # %% outputs directory
@@ -88,6 +89,7 @@ single_pass = False  # push-pull or push only for the calibration
 loop_gain = 0.7
 n_iter = 200
 delay = 1
+loop_frequency = 1000  # [Hz] loop frequency
 
 # %% Build objects
 
@@ -95,10 +97,10 @@ delay = 1
 
 # create the Telescope object
 tel = Telescope(
-    resolution=resolution,  # [pixel] resolution of
-    # the telescope
-    diameter=diameter,
-)  # [m] telescope diameter
+    resolution=resolution,  # [pixel] resolution of the telescope
+    diameter=diameter,  # [m] telescope diameter
+    samplingTime=1 / loop_frequency,  # [s] sampling time of the telescope
+)
 pupil_oversampled = get_circular_pupil(tel.resolution * pupil_oversampling_factor)
 pupil_binned = pupil_oversampled.reshape(
     tel.resolution,
@@ -106,16 +108,6 @@ pupil_binned = pupil_oversampled.reshape(
     tel.resolution,
     pupil_oversampling_factor,
 ).mean(axis=(1, 3))
-
-# original_pupil = deepcopy(tel.pupil)
-# tel.pupil = pupil_binned
-# tel.pupilReflectivity = pupil_binned  # set the pupil reflectivity to the binned pupil
-
-# fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-# axs[0].imshow(original_pupil)
-# axs[0].set_title("original pupil")
-# axs[1].imshow(tel.pupilReflectivity)
-# axs[1].set_title("new oversampled then binned Pupil")
 
 # %% -----------------------     NGS   ----------------------------------
 
@@ -149,6 +141,32 @@ atm = Atmosphere(
 
 dm = DeformableMirror(tel, nSubap=n_actuator)
 
+# ------------------------- MODAL BASIS -------------------------------
+
+if modal_basis == "KL":
+    m2c, c_phi = compute_KL_basis(tel, atm, dm, return_covariance=True)
+    ngs**tel  # reset
+
+elif modal_basis == "poke":
+    m2c = np.identity(dm.nValidAct)
+
+# extract calibration basis
+
+influence_functions = dm.modes
+calibration_basis = influence_functions @ m2c
+calibration_basis = tel.pupil.reshape(-1, 1) * calibration_basis  # apply pupil mask
+
+# -------------------------   Modal  DM   ----------------------------------
+
+modal_dm = DeformableMirror(tel, nSubap=n_actuator, modes=calibration_basis)
+
+# % ----------------------- Science camera ---------------------------- #
+
+science_camera = Detector(
+    nRes=tel.resolution, psf_sampling=4, integrationTime=1 / loop_frequency
+)
+
+
 # %% ----------------------- Pyramid ---------------------------- #
 
 # pyramid
@@ -163,7 +181,7 @@ pyramid_sr = Pyramid(
 
 reference_intensities_2d_no_sr = pyramid_sr.referenceSignal_2D
 
-# super resolved pyramid
+# %% super resolved pyramid - define the pupil shifts to be applied to the WFS
 
 pupil_shifts_zeros = [
     [
@@ -240,6 +258,23 @@ pupil_shifts_quincux = [
     ],
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
+pupil_shifts_alternative_quincux = [
+    [
+        -0.25,
+        -0.25,
+        0.25,
+        0.25,
+    ],
+    [
+        -0.25,
+        -0.25,
+        0.25,
+        0.25,
+    ],
+]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
+
+# %%
+
 pupil_shifts_dict = {
     "zeros": pupil_shifts_zeros,
     "horizontal": pupil_shifts_horizontal,
@@ -248,7 +283,9 @@ pupil_shifts_dict = {
     "quincux": pupil_shifts_quincux,
 }
 
-# %%
+pupil_shifts_dict = {
+    "alternative quincux": pupil_shifts_alternative_quincux,
+}
 
 for key, value in pupil_shifts_dict.items():
 
@@ -293,35 +330,14 @@ for key, value in pupil_shifts_dict.items():
     axs[1, 1].imshow(pupil_4)
     axs[1, 1].set_title("Pupil 4")
 
-    # ------------------------- MODAL BASIS -------------------------------
-
-    if modal_basis == "KL":
-        m2c, c_phi = compute_KL_basis(tel, atm, dm, return_covariance=True)
-        ngs**tel  # reset
-
-    elif modal_basis == "poke":
-        m2c = np.identity(dm.nValidAct)
-
-    # extract calibration basis
-
-    influence_functions = dm.modes
-    calibration_basis = influence_functions @ m2c
-    calibration_basis = tel.pupil.reshape(-1, 1) * calibration_basis  # apply pupil mask
-
-    # -------------------------   Modal  DM   ----------------------------------
-
-    first_calibration_modal_dm = DeformableMirror(
-        tel, nSubap=n_actuator, modes=calibration_basis
-    )
-
     # calibration
 
     calib_sr = InteractionMatrix(
         ngs,
         tel,
-        first_calibration_modal_dm,
+        modal_dm,
         pyramid_sr,
-        M2C=np.diag(np.ones(first_calibration_modal_dm.nValidAct)),
+        M2C=np.diag(np.ones(modal_dm.nValidAct)),
         stroke=stroke,
         single_pass=single_pass,
         noise="off",
@@ -340,7 +356,6 @@ for key, value in pupil_shifts_dict.items():
     n_modes = int(2.0 * pyramid_sr.nSignal / 4)  # number of controlled modes
 
     # # compute classic lse reconstructor
-
     # reconstructor_lse = np.linalg.pinv(
     #     interaction_matrix[:, :n_modes]
     # )  # unweighted LSE reconstructor
@@ -355,18 +370,22 @@ for key, value in pupil_shifts_dict.items():
     # )  # pad the reconstructor with zeros to match the number of WFS signals
 
     # compute reconstructor with truncated SVD weightened by the phase covariance matrix
-
     L = np.linalg.cholesky(c_phi)
-
     A = interaction_matrix @ L
-
     U, s, Vh = np.linalg.svd(A, full_matrices=False)
-
     U_k = U[:, :n_modes]
     s_k = s[:n_modes]
     Vh_k = Vh[:n_modes, :]
-
     reconstructor_lse = L @ Vh_k.T / s_k @ U_k.T
+    T = L @ Vh_k.T  # (n_cal, n_modes): control modes in original-basis coefficients
+    control_basis = calibration_basis @ T  # control modes in phase space
+    modal_projector_ctrl = np.linalg.pinv(
+        control_basis
+    )  # phase -> control-mode coefficients z
+
+    # phase -> coefficients on the ORIGINAL basis, restricted to the controlled subspace
+    modal_projector = T @ modal_projector_ctrl  # (n_cal, n_pix)
+    print("modal projector computed!")
 
     # SEED
 
@@ -374,21 +393,11 @@ for key, value in pupil_shifts_dict.items():
 
     # Close the loop - LSE - SR
 
-    (
-        total_lse_sr,
-        residual_lse_sr,
-        strehl_lse_sr,
-        dm_coefs_lse_sr,
-        turbulence_phase_screens_lse_sr,
-        residual_phase_screens_lse_sr,
-        wfs_frames_lse_sr,
-        wfs_signals_lse_sr,
-        short_exposure_psf_lse_sr,
-    ) = close_the_loop(
-        tel,
+    closed_loop_results = close_the_loop(
         ngs,
         atm,
-        first_calibration_modal_dm,
+        tel,
+        modal_dm,
         pyramid_sr,
         reconstructor_lse,
         loop_gain,
@@ -401,11 +410,15 @@ for key, value in pupil_shifts_dict.items():
         seed=seed,
         save_telemetry=True,
         save_psf=True,
+        science_camera=science_camera,
+        modal_projector=modal_projector,
     )
 
     # post processing
 
-    long_exposure_psf_lse_sr = np.sum(short_exposure_psf_lse_sr[:, :, 100:], axis=2)
+    long_exposure_psf_lse_sr = np.sum(
+        closed_loop_results.short_exposure_psf[:, :, 100:], axis=2
+    )
 
     # plots
 
@@ -419,8 +432,8 @@ for key, value in pupil_shifts_dict.items():
 
     # residuals
     plt.figure()
-    plt.plot(total_lse_sr, label="total_lse_sr")
-    plt.plot(residual_lse_sr, label="residual_lse_sr")
+    plt.plot(closed_loop_results.total, label="total")
+    plt.plot(closed_loop_results.residual, label="residual")
     plt.xlabel("loop iteration")
     plt.ylabel("residual phase RMS [nm]")
     plt.title(f"Closed Loop residuals\n{key} shifts")
@@ -429,7 +442,7 @@ for key, value in pupil_shifts_dict.items():
 
     # strehls
     plt.figure()
-    plt.plot(strehl_lse_sr, label="strehl_lse_sr")
+    plt.plot(closed_loop_results.strehl, label="strehl")
     plt.ylabel("strehl phase RMS [nm]")
     plt.title(f"Closed Loop strehls\n{key} shifts")
     plt.legend()
