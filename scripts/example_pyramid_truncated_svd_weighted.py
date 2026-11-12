@@ -66,7 +66,7 @@ n_actuator = 2 * n_subaperture  # number of actuators
 
 # ----------------------- WFS ---------------------- #
 
-modulation = 3.0  # [lambda/D] modulation radius or half grey width
+modulation = 0.0  # [lambda/D] modulation radius or half grey width
 n_pix_separation = 10  # [pixel] separation ratio between the pupils
 light_threshold = (
     0.3 if modulation > 0.0 else 0
@@ -281,11 +281,12 @@ pupil_shifts_dict = {
     "vertical": pupil_shifts_vertical,
     "hv": pupil_shifts_hv,
     "quincux": pupil_shifts_quincux,
-}
-
-pupil_shifts_dict = {
     "alternative quincux": pupil_shifts_alternative_quincux,
 }
+
+# pupil_shifts_dict = {
+#     "alternative quincux": pupil_shifts_alternative_quincux,
+# }
 
 for key, value in pupil_shifts_dict.items():
 
@@ -430,10 +431,15 @@ for key, value in pupil_shifts_dict.items():
     plt.xlabel("# modes")
     plt.savefig(fig_dir / "noise_propagation.png", bbox_inches="tight")
 
+    fitting_error = np.std(
+        closed_loop_results.fitting_limited_phase_screens[tel.pupil.flatten(), :],
+        axis=0,
+    )
     # residuals
     plt.figure()
     plt.plot(closed_loop_results.total, label="total")
     plt.plot(closed_loop_results.residual, label="residual")
+    plt.plot(fitting_error, label="fitting error")
     plt.xlabel("loop iteration")
     plt.ylabel("residual phase RMS [nm]")
     plt.title(f"Closed Loop residuals\n{key} shifts")
@@ -459,6 +465,38 @@ for key, value in pupil_shifts_dict.items():
         f"long_exposure_psf_lse_sr\nPyramid - {n_modes} controlled modes\n{key} shifts"
     )
     plt.savefig(fig_dir / f"long_exposure_psf{key}_shifts.png", bbox_inches="tight")
+
+    # ideal coronograph fitting limited
+
+    pupil = tel.pupil.astype(float)
+    n_pix, pad = tel.resolution, 2
+
+    opd = closed_loop_results.fitting_limited_phase_screens.copy()  # (n_pix**2, n_iter)
+    field = pupil.reshape(-1, 1) * np.exp(1j * 2 * np.pi / ngs.wavelength * opd)
+    field = field.reshape(n_pix, n_pix, -1)  # zero outside the pupil
+
+    # ideal coronagraph: remove the pupil mode, E - <E,P>/<P,P> * P
+    field -= (
+        np.sum(pupil[..., None] * field, axis=(0, 1)) / np.sum(pupil**2)
+    ) * pupil[..., None]
+
+    # long-exposure PSF
+    psf_le = np.mean(
+        np.abs(
+            np.fft.fftshift(
+                np.fft.fft2(field, s=(pad * n_pix,) * 2, axes=(0, 1)), axes=(0, 1)
+            )
+        )
+        ** 2,
+        axis=2,
+    )
+    psf_le /= (
+        np.abs(np.fft.fft2(pupil, s=(pad * n_pix,) * 2)).max() ** 2
+    )  # normalise by diffraction-limited peak
+
+    plt.figure()
+    plt.imshow(psf_le, norm="linear", cmap="inferno")
+    plt.title(f"long exposure psf fitting limited ideal coronagraph\n{key} shifts")
 
 # %%
 
