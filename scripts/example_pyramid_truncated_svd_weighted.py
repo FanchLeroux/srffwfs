@@ -88,9 +88,10 @@ loop_gain = 0.7
 n_iter = 200
 delay = 1
 loop_frequency = 1000  # [Hz] loop frequency
-n_controlled_modes = 1 * int(
-    np.pi * (n_subaperture / 2) ** 2
+n_controlled_modes = int(
+    0.8 * np.pi * (n_subaperture / 2) ** 2
 )  # number of controlled modes
+use_weighted_svd = False  # use weighted truncated SVD reconstructor
 
 # %% Build objects
 
@@ -298,11 +299,17 @@ pupil_shifts_dict = {
 }
 
 pupil_shifts_dict = {
+    "hv": pupil_shifts_quincux,
     "zeros": pupil_shifts_zeros,
-    "hv": pupil_shifts_hv,
 }
 
 for key, value in pupil_shifts_dict.items():
+
+    # --- reset state left by the previous closed loop ---
+    dm.coefs = 0
+    pyramid_sr.cam.photonNoise = False
+    pyramid_sr.cam.readoutNoise = 0.0
+    ngs**tel  # flat wavefront, resets OPD
 
     pupil_shifts = (
         value  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
@@ -312,6 +319,9 @@ for key, value in pupil_shifts_dict.items():
     )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
     pyramid_sr.modulation = modulation  # update reference intensities etc.
     reference_intensities_2d_sr = pyramid_sr.referenceSignal_2D
+
+    plt.figure()
+    plt.imshow(reference_intensities_2d_sr)
 
     plt.figure()
     plt.imshow(reference_intensities_2d_sr - reference_intensities_2d_no_sr)
@@ -357,6 +367,7 @@ for key, value in pupil_shifts_dict.items():
         single_pass=single_pass,
         noise="off",
         display=True,
+        invert=False,
     )
 
     interaction_matrix = calib_sr.D
@@ -366,39 +377,50 @@ for key, value in pupil_shifts_dict.items():
         f"Interaction matrix rank: {np.linalg.matrix_rank(interaction_matrix)}"
     )
 
-    # # compute classic lse reconstructor
-    # reconstructor_lse = np.linalg.pinv(
-    #     interaction_matrix[:, :n_controlled_modes]
-    # )  # unweighted LSE reconstructor
-    # reconstructor_lse = np.concatenate(
-    #     (
-    #         reconstructor_lse,
-    #         np.zeros(
-    #             (interaction_matrix.shape[1] - n_controlled_modes, reconstructor_lse.shape[1])
-    #         ),
-    #     ),
-    #     axis=0,
-    # )  # pad the reconstructor with zeros to match the number of WFS signals
+    if use_weighted_svd:
+        # compute reconstructor with truncated SVD weightened by the phase covariance matrix
+        L = np.linalg.cholesky(c_phi)
+        A = interaction_matrix @ L
+        U, s, Vh = np.linalg.svd(A, full_matrices=False)
+        U_k = U[:, :n_controlled_modes]
+        s_k = s[:n_controlled_modes]
+        Vh_k = Vh[:n_controlled_modes, :]
+        reconstructor_lse = L @ Vh_k.T / s_k @ U_k.T
+        T = (
+            L @ Vh_k.T
+        )  # (n_cal, n_controlled_modes): control modes in original-basis coefficients
+        control_basis = calibration_basis @ T  # control modes in phase space
+        modal_projector_ctrl = np.linalg.pinv(
+            control_basis
+        )  # phase -> control-mode coefficients z
 
-    # compute reconstructor with truncated SVD weightened by the phase covariance matrix
-    L = np.linalg.cholesky(c_phi)
-    A = interaction_matrix @ L
-    U, s, Vh = np.linalg.svd(A, full_matrices=False)
-    U_k = U[:, :n_controlled_modes]
-    s_k = s[:n_controlled_modes]
-    Vh_k = Vh[:n_controlled_modes, :]
-    reconstructor_lse = L @ Vh_k.T / s_k @ U_k.T
-    T = (
-        L @ Vh_k.T
-    )  # (n_cal, n_controlled_modes): control modes in original-basis coefficients
-    control_basis = calibration_basis @ T  # control modes in phase space
-    modal_projector_ctrl = np.linalg.pinv(
-        control_basis
-    )  # phase -> control-mode coefficients z
+        # phase -> coefficients on the ORIGINAL basis, restricted to the controlled subspace
+        # modal_projector = T @ modal_projector_ctrl  # (n_cal, n_pix)
+        # print("modal projector computed!")
 
-    # phase -> coefficients on the ORIGINAL basis, restricted to the controlled subspace
-    modal_projector = T @ modal_projector_ctrl  # (n_cal, n_pix)
-    print("modal projector computed!")
+    else:
+        # compute classic lse reconstructor
+        reconstructor_lse = np.linalg.pinv(
+            interaction_matrix[:, :n_controlled_modes]
+        )  # unweighted LSE reconstructor
+        reconstructor_lse = np.concatenate(
+            (
+                reconstructor_lse,
+                np.zeros(
+                    (
+                        interaction_matrix.shape[1] - n_controlled_modes,
+                        reconstructor_lse.shape[1],
+                    )
+                ),
+            ),
+            axis=0,
+        )  # pad the reconstructor with zeros to match the number of WFS signals
+        # modal_projector = np.linalg.pinv(
+        #     calibration_basis
+        # )  # phase -> coefficients on the ORIGINAL basis
+        # print("modal projector computed!")
+
+    modal_projector = None
 
     # SEED
 
@@ -443,9 +465,13 @@ for key, value in pupil_shifts_dict.items():
     plt.xlabel("# modes")
     plt.savefig(fig_dir / "noise_propagation.png", bbox_inches="tight")
 
-    fitting_error = np.std(
-        closed_loop_results.fitting_limited_phase_screens[tel.pupil.flatten(), :],
-        axis=0,
+    fitting_error = (
+        np.std(
+            closed_loop_results.fitting_limited_phase_screens[tel.pupil.flatten(), :],
+            axis=0,
+        )
+        if modal_projector is not None
+        else 0.0
     )
     # residuals
     plt.figure()
@@ -478,37 +504,35 @@ for key, value in pupil_shifts_dict.items():
     )
     plt.savefig(fig_dir / f"long_exposure_psf{key}_shifts.png", bbox_inches="tight")
 
-    # ideal coronograph fitting limited
-
-    pupil = tel.pupil.astype(float)
-    n_pix, pad = tel.resolution, 2
-
-    opd = closed_loop_results.fitting_limited_phase_screens.copy()  # (n_pix**2, n_iter)
-    field = pupil.reshape(-1, 1) * np.exp(1j * 2 * np.pi / ngs.wavelength * opd)
-    field = field.reshape(n_pix, n_pix, -1)  # zero outside the pupil
-
-    # ideal coronagraph: remove the pupil mode, E - <E,P>/<P,P> * P
-    field -= (
-        np.sum(pupil[..., None] * field, axis=(0, 1)) / np.sum(pupil**2)
-    ) * pupil[..., None]
-
-    # long-exposure PSF
-    psf_le = np.mean(
-        np.abs(
-            np.fft.fftshift(
-                np.fft.fft2(field, s=(pad * n_pix,) * 2, axes=(0, 1)), axes=(0, 1)
+    if modal_projector is not None:
+        # ideal coronograph fitting limited
+        pupil = tel.pupil.astype(float)
+        n_pix, pad = tel.resolution, 2
+        opd = (
+            closed_loop_results.fitting_limited_phase_screens.copy()
+        )  # (n_pix**2, n_iter)
+        field = pupil.reshape(-1, 1) * np.exp(1j * 2 * np.pi / ngs.wavelength * opd)
+        field = field.reshape(n_pix, n_pix, -1)  # zero outside the pupil
+        # ideal coronagraph: remove the pupil mode, E - <E,P>/<P,P> * P
+        field -= (
+            np.sum(pupil[..., None] * field, axis=(0, 1)) / np.sum(pupil**2)
+        ) * pupil[..., None]
+        # long-exposure PSF
+        psf_le = np.mean(
+            np.abs(
+                np.fft.fftshift(
+                    np.fft.fft2(field, s=(pad * n_pix,) * 2, axes=(0, 1)), axes=(0, 1)
+                )
             )
+            ** 2,
+            axis=2,
         )
-        ** 2,
-        axis=2,
-    )
-    psf_le /= (
-        np.abs(np.fft.fft2(pupil, s=(pad * n_pix,) * 2)).max() ** 2
-    )  # normalise by diffraction-limited peak
-
-    plt.figure()
-    plt.imshow(psf_le, norm="linear", cmap="inferno")
-    plt.title(f"long exposure psf fitting limited ideal coronagraph\n{key} shifts")
+        psf_le /= (
+            np.abs(np.fft.fft2(pupil, s=(pad * n_pix,) * 2)).max() ** 2
+        )  # normalise by diffraction-limited peak
+        plt.figure()
+        plt.imshow(psf_le, norm="linear", cmap="inferno")
+        plt.title(f"long exposure psf fitting limited ideal coronagraph\n{key} shifts")
 
 # %%
 
