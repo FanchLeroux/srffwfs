@@ -355,7 +355,9 @@ for key, value in pupil_shifts_dict.items():
 
     # choose number of controlled modes
 
-    n_modes = int(np.pi * (pyramid_sr.nSubap / 2) ** 2)  # number of controlled modes
+    n_modes = 3 * int(
+        np.pi * (pyramid_sr.nSubap / 2) ** 2
+    )  # number of controlled modes
 
     # # compute classic lse reconstructor
     # reconstructor_lse = np.linalg.pinv(
