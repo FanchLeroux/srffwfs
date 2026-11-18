@@ -158,11 +158,103 @@ science_camera = Detector(
     nRes=tel.resolution, psf_sampling=4, integrationTime=1 / loop_frequency
 )
 
+# %% super resolved pyramid - define the pupil shifts to be applied to the WFS
+
+pupil_shifts_zeros = [
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+]
+
+pupil_shifts_horizontal = [
+    [
+        0.25,
+        0.25,
+        -0.25,
+        -0.25,
+    ],
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+]
+
+pupil_shifts_vertical = [
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+    [
+        0.25,
+        0.25,
+        -0.25,
+        -0.25,
+    ],
+]
+
+pupil_shifts_hv = [
+    [
+        0.25,
+        0.0,
+        -0.25,
+        0.0,
+    ],
+    [
+        0.0,
+        0.25,
+        0.0,
+        -0.25,
+    ],
+]
+
+pupil_shifts_quincux = [
+    [
+        0.25,
+        -0.25,
+        -0.25,
+        0.25,
+    ],
+    [
+        -0.25,
+        -0.25,
+        0.25,
+        0.25,
+    ],
+]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
+
+pupil_shifts_alternative_quincux = [
+    [
+        -0.25,
+        -0.25,
+        0.25,
+        0.25,
+    ],
+    [
+        -0.25,
+        -0.25,
+        0.25,
+        0.25,
+    ],
+]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
 # %% ----------------------- Pyramid ---------------------------- #
 
 # pyramid
-pyramid_sr = Pyramid(
+
+pyramid_no_sr = Pyramid(
     nSubap=n_subaperture,
     telescope=tel,
     modulation=modulation,
@@ -171,11 +263,40 @@ pyramid_sr = Pyramid(
     postProcessing="fullFrame",
 )
 
-reference_intensities_2d_no_sr = pyramid_sr.referenceSignal_2D
+pyramid_sr = Pyramid(
+    nSubap=n_subaperture,
+    telescope=tel,
+    modulation=modulation,
+    lightRatio=light_threshold,
+    n_pix_separation=n_pix_separation,
+    postProcessing="fullFrame",
+)
+pyramid_sr.apply_shift_wfs(
+    pupil_shifts_hv[0],
+    pupil_shifts_hv[1],
+)
+pyramid_sr.modulation = modulation  # update reference intensities etc.
+
+reference_intensities_2d_no_sr = pyramid_no_sr.referenceSignal_2D
 
 # %%
 
 calib_no_sr = InteractionMatrix(
+    ngs,
+    tel,
+    modal_dm,
+    pyramid_no_sr,
+    M2C=np.diag(np.ones(modal_dm.nValidAct)),
+    stroke=stroke,
+    single_pass=single_pass,
+    noise="off",
+    display=True,
+    invert=False,
+)
+
+# %%
+
+calib_sr = InteractionMatrix(
     ngs,
     tel,
     modal_dm,
@@ -188,43 +309,163 @@ calib_no_sr = InteractionMatrix(
     invert=False,
 )
 
-# %%
+# %% SVD analysis of the interaction matrix
 
-mask = pyramid_sr.valid_signal_2D.astype(bool)
-
-support = np.full(mask.shape, np.nan)
-support[mask] = calib_no_sr.D[:, 100]
+U, s, Vt = np.linalg.svd(calib_no_sr.D, full_matrices=False)
 
 plt.figure()
-plt.imshow(np.abs(support))
+plt.semilogy(s)
+plt.title("Singular values of the interaction matrix\nNo super resolution")
+plt.xlabel("Mode")
+plt.ylabel("Singular value")
+
+U, s, Vt = np.linalg.svd(calib_sr.D, full_matrices=False)
+
+plt.figure()
+plt.semilogy(s)
+plt.title("Singular values of the interaction matrix\nWith super resolution")
+plt.xlabel("Mode")
+plt.ylabel("Singular value")
+
+# %%
+
+n_mode = 0
+
+plt.figure()
+plt.imshow(calibration_basis[n_mode])
+plt.title(f"calibration basis mode {n_mode}")
+
+mask_no_sr = pyramid_no_sr.valid_signal_2D.astype(bool)
+mask_sr = pyramid_sr.valid_signal_2D.astype(bool)
+
+support = np.full(mask_no_sr.shape, np.nan)
+support[mask_no_sr] = calib_no_sr.D[:, n_mode]
+
+plt.figure()
+plt.imshow(support)
+plt.colorbar()
+plt.title(f"support mode {n_mode}")
 
 # %%
 
 
-def drop_weakest_pupils(support, mask, n_pupils=4, n_drop=2, tol=0.01):
-    """Set the `n_drop` weakest pupils to 0, unless all pupils have similar signal.
-
-    Pupils are the connected components of `mask`. They count as "similar"
-    if (max - min) / max of their total signal is below `tol`.
+def drop_weakest_pupils(values, mask, n_pupils=4, n_drop=2, tol=0.01):
     """
+    Set the weakest pupils to zero, independently for each mode.
+
+    Pupils are the connected components of `mask`. For each mode (column of
+    `values`), the signal of a pupil is the standard deviation of `values`
+    over its pixels. If the relative spread of the pupil signals,
+    ``(max - min) / max``, is below `tol`, the pupils are considered
+    equivalent and that mode is left unchanged.
+
+    Parameters
+    ----------
+    values : array_like, shape (mask.sum(), n_modes) or (mask.sum(),)
+        Interaction matrix restricted to the valid pixels. Each column is a
+        different mode, and rows are ordered in row-major order like the
+        pixels of `mask`. A 1D vector is treated as a single mode.
+    mask : array_like of bool, shape (ny, nx)
+        Boolean image of the valid pixels. Must contain exactly `n_pupils`
+        connected components.
+    n_pupils : int, optional
+        Expected number of pupils in `mask`. Default is 4.
+    n_drop : int, optional
+        Number of weakest pupils to set to zero, for each mode. Default is 2.
+    tol : float, optional
+        Relative spread of the pupil signals under which all pupils are
+        kept. Default is 0.01.
+
+    Returns
+    -------
+    out : ndarray, same shape as `values`
+        Copy of `values` in which, for each mode, the `n_drop` weakest pupils
+        (lowest standard deviation) are set to 0, unless the pupil signals of
+        that mode are within `tol`.
+
+    Raises
+    ------
+    ValueError
+        If the number of connected components in `mask` is not `n_pupils`, or
+        if the number of rows of `values` does not match ``mask.sum()``.
+
+    Notes
+    -----
+    The weakest pupils are selected separately for every mode, so different
+    modes may have different pupils zeroed.
+
+    Pupils are labelled with `scipy.ndimage.label`, which uses 4-connectivity
+    by default. Pupils that touch each other will be merged into a single
+    component and trigger the `ValueError`.
+
+    Examples
+    --------
+    >>> mask = pyramid_sr.valid_signal_2D.astype(bool)
+    >>> D_clean = drop_weakest_pupils(calib_no_sr.D, mask)
+    >>> D_clean.shape == calib_no_sr.D.shape
+    True
+    """
+    mask = np.asarray(mask, dtype=bool)
     labels, n = ndimage.label(mask)
     if n != n_pupils:
         raise ValueError(f"Expected {n_pupils} pupils, found {n}")
 
-    ids = np.arange(1, n + 1)
-    signal = ndimage.sum_labels(np.nan_to_num(support), labels, ids)
+    values = np.asarray(values, dtype=float)
+    is_1d = values.ndim == 1
+    if is_1d:
+        values = values[:, None]
+    if values.shape[0] != mask.sum():
+        raise ValueError(f"`values` has {values.shape[0]} rows, expected {mask.sum()}")
 
-    if (signal.max() - signal.min()) / signal.max() < tol:
-        return support.copy()  # signals are close: keep all four
+    pixel_idx = labels[mask] - 1  # pupil index (0-based) of each valid pixel
 
-    weakest = ids[np.argsort(signal)[:n_drop]]
-    out = support.copy()
-    out[np.isin(labels, weakest) & mask] = 0
-    return out
+    # Signal (std) per pupil and per mode, shape (n_pupils, n_modes)
+    signal = np.stack([values[pixel_idx == k].std(axis=0) for k in range(n)])
 
+    # Modes whose pupils are not all similar
+    with np.errstate(divide="ignore", invalid="ignore"):
+        spread = (signal.max(axis=0) - signal.min(axis=0)) / signal.max(axis=0)
+    active = spread >= tol  # shape (n_modes,)
+
+    # Pupils to drop, per mode, shape (n_pupils, n_modes)
+    drop = np.zeros(signal.shape, dtype=bool)
+    weakest = np.argsort(signal, axis=0)[:n_drop]
+    np.put_along_axis(drop, weakest, True, axis=0)
+    drop &= active
+
+    out = values.copy()
+    out[drop[pixel_idx]] = 0  # (n_pix, n_modes) boolean selection
+
+    return out[:, 0] if is_1d else out
+
+
+imat_modified_no_sr = drop_weakest_pupils(calib_no_sr.D, mask_no_sr)
+imat_modified_sr = drop_weakest_pupils(calib_sr.D, mask_sr)
+
+support_modified = np.full(mask_no_sr.shape, np.nan)
+support_modified[mask_no_sr] = imat_modified_no_sr[:, n_mode]
+plt.figure()
+plt.imshow(support_modified)
+plt.colorbar()
+plt.title(f"support modified mode {n_mode}")
+
+# %% SVD analysis modified interaction matrix
+
+U, s, Vt = np.linalg.svd(imat_modified_no_sr, full_matrices=False)
 
 plt.figure()
-plt.imshow(drop_weakest_pupils(np.abs(support), mask))
+plt.semilogy(s)
+plt.title("Singular values of the modified interaction matrix")
+plt.xlabel("Mode")
+plt.ylabel("Singular value")
+
+U, s, Vt = np.linalg.svd(imat_modified_sr, full_matrices=False)
+
+plt.figure()
+plt.semilogy(s)
+plt.title("Singular values of the modified interaction matrix\nWith super resolution")
+plt.xlabel("Mode")
+plt.ylabel("Singular value")
 
 # %% super resolved pyramid - define the pupil shifts to be applied to the WFS
 
