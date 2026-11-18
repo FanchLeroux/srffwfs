@@ -69,7 +69,7 @@ n_actuator = 2 * n_subaperture  # number of actuators
 
 # ----------------------- WFS ---------------------- #
 
-modulation = 3.0  # [lambda/D] modulation radius or half grey width
+modulation = 2.0  # [lambda/D] modulation radius or half grey width
 n_pix_separation = 2  # [pixel] separation ratio between the pupils
 light_threshold = (
     0.3 if modulation > 0.0 else 0
@@ -271,9 +271,12 @@ pyramid_sr = Pyramid(
     n_pix_separation=n_pix_separation,
     postProcessing="fullFrame",
 )
+
+pupil_shifts = pupil_shifts_horizontal
+
 pyramid_sr.apply_shift_wfs(
-    pupil_shifts_hv[0],
-    pupil_shifts_hv[1],
+    pupil_shifts[0],
+    pupil_shifts[1],
 )
 pyramid_sr.modulation = modulation  # update reference intensities etc.
 
@@ -466,6 +469,125 @@ plt.semilogy(s)
 plt.title("Singular values of the modified interaction matrix\nWith super resolution")
 plt.xlabel("Mode")
 plt.ylabel("Singular value")
+
+# %%
+
+
+def split_pupils(values, mask, n_pupils=4):
+    """
+    Split a signal vector into one column per pupil.
+
+    Pupils are the connected components of `mask`. Column ``k`` of the output
+    contains only the values of the ``k``-th pupil, in row-major order.
+
+    Parameters
+    ----------
+    values : array_like, shape (mask.sum(),)
+        Signal on the valid pixels, e.g. one column of the interaction
+        matrix, ordered in row-major order like the pixels of `mask`.
+    mask : array_like of bool, shape (ny, nx)
+        Boolean image of the valid pixels. Must contain exactly `n_pupils`
+        connected components, all with the same number of pixels.
+    n_pupils : int, optional
+        Expected number of pupils in `mask`. Default is 4.
+
+    Returns
+    -------
+    out : ndarray, shape (mask.sum() // n_pupils, n_pupils)
+        Column ``k`` holds the values of pupil ``k``. Row ``i`` of every
+        column is the ``i``-th pixel of that pupil in row-major order.
+
+    Raises
+    ------
+    ValueError
+        If the number of connected components in `mask` is not `n_pupils`,
+        if the pupils do not all have the same number of pixels, or if the
+        length of `values` does not match ``mask.sum()``.
+
+    Notes
+    -----
+    Pupils are labelled with `scipy.ndimage.label` (4-connectivity), so they
+    are numbered in the order they are first met in row-major scan.
+
+    If the pupils are translated copies of the same shape, row ``i`` of
+    `out` corresponds to the same relative position in every pupil.
+
+    Examples
+    --------
+    >>> mask = pyramid_sr.valid_signal_2D.astype(bool)
+    >>> pupils = split_pupils(calib_no_sr.D[:, 140], mask)
+    >>> pupils.shape
+    (256, 4)
+    """
+    mask = np.asarray(mask, dtype=bool)
+    labels, n = ndimage.label(mask)
+    if n != n_pupils:
+        raise ValueError(f"Expected {n_pupils} pupils, found {n}")
+
+    values = np.asarray(values)
+    if values.shape != (mask.sum(),):
+        raise ValueError(f"`values` has shape {values.shape}, expected ({mask.sum()},)")
+
+    pixel_idx = labels[mask] - 1  # pupil index (0-based) of each valid pixel
+
+    counts = np.bincount(pixel_idx, minlength=n)
+    if not np.all(counts == counts[0]):
+        raise ValueError(f"Pupils have different pixel counts: {counts}")
+
+    # A stable sort groups pixels by pupil while keeping row-major order
+    order = np.argsort(pixel_idx, kind="stable")
+    return values[order].reshape(n, counts[0]).T
+
+
+test = split_pupils(calib_no_sr.D[:, 140], mask_no_sr)
+test_modified = split_pupils(imat_modified_no_sr[:, 140], mask_no_sr)
+
+# %%
+
+
+def free_family_check(pupils, tol=None):
+    """
+    Check whether the columns of `pupils` are linearly independent.
+
+    Columns are normalized to unit norm first, so the result does not
+    depend on the amplitude of each pupil.
+
+    Parameters
+    ----------
+    pupils : ndarray, shape (n_pix, n_pupils)
+    tol : float, optional
+        Relative threshold on singular values. Default is the NumPy
+        matrix-rank default, ``max(shape) * eps``.
+
+    Returns
+    -------
+    rank : int
+        Numerical rank (equals n_pupils if the family is free).
+    s : ndarray, shape (n_pupils,)
+        Singular values of the column-normalized matrix, in descending
+        order. Their squares sum to n_pupils.
+    cond : float
+        s.max() / s.min(). Close to 1 = well separated, huge = nearly
+        dependent.
+    """
+    norms = np.linalg.norm(pupils, axis=0)
+    A = pupils / norms  # fails (NaN) if a column is zero
+    s = np.linalg.svd(A, compute_uv=False)
+    rank = np.linalg.matrix_rank(A, tol=None if tol is None else tol * s[0])
+    return rank, s, s[0] / s[-1]
+
+
+# %% no SR
+
+pupils = split_pupils(calib_no_sr.D[:, 0], mask_no_sr)
+rank, s, cond = free_family_check(pupils)
+print(rank, s, cond)  # rank == 4 -> free family
+
+# %% SR
+
+pupils = split_pupils(calib_sr.D[:, 100], mask_sr)
+rank, s, cond = free_family_check(pupils)
+print(rank, s, cond)  # rank == 4 -> free family
 
 # %% super resolved pyramid - define the pupil shifts to be applied to the WFS
 
