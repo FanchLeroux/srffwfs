@@ -36,7 +36,7 @@ fig_dir = config.root_dir / "outputs"
 # phot.R = [0.640e-6, 0.150e-6, 4.01e12/cst]
 wavelength = 640e-9  # [m] wavelength of the guide star
 optical_band = "R"  # optical band of the guide star
-n_photons_per_controlled_mode = 2
+n_photons_per_controlled_mode = 4
 
 # ------------------ ATMOSPHERE ----------------- #
 
@@ -89,7 +89,7 @@ n_iter = 200
 delay = 1
 loop_frequency = 1000  # [Hz] loop frequency
 n_controlled_modes = int(
-    1.0 * np.pi * (n_subaperture / 2) ** 2
+    2 * np.pi * (n_subaperture / 2) ** 2
 )  # number of controlled modes
 use_weighted_svd = False  # use weighted truncated SVD reconstructor
 
