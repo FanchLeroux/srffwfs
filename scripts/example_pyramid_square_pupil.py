@@ -272,7 +272,7 @@ pyramid_sr = Pyramid(
     postProcessing="fullFrame",
 )
 
-pupil_shifts = pupil_shifts_horizontal
+pupil_shifts = pupil_shifts_hv
 
 pyramid_sr.apply_shift_wfs(
     pupil_shifts[0],
@@ -545,49 +545,92 @@ test_modified = split_pupils(imat_modified_no_sr[:, 140], mask_no_sr)
 # %%
 
 
-def free_family_check(pupils, tol=None):
+def free_family_check(pupils, eps=0.0):
     """
-    Check whether the columns of `pupils` are linearly independent.
-
-    Columns are normalized to unit norm first, so the result does not
-    depend on the amplitude of each pupil.
-
-    Parameters
-    ----------
-    pupils : ndarray, shape (n_pix, n_pupils)
-    tol : float, optional
-        Relative threshold on singular values. Default is the NumPy
-        matrix-rank default, ``max(shape) * eps``.
+    Linear-independence check on the non-null columns of `pupils`.
 
     Returns
     -------
     rank : int
-        Numerical rank (equals n_pupils if the family is free).
-    s : ndarray, shape (n_pupils,)
-        Singular values of the column-normalized matrix, in descending
-        order. Their squares sum to n_pupils.
+        Numerical rank of the non-null, column-normalized columns.
+    s : ndarray
+        Singular values (descending) of those columns.
     cond : float
-        s.max() / s.min(). Close to 1 = well separated, huge = nearly
-        dependent.
+        s.max() / s.min(), or inf if dependent.
+    n_active : int
+        Number of non-null pupils kept in the test.
     """
+    pupils = np.asarray(pupils, dtype=float)
+    if not np.isfinite(pupils).all():
+        return 0, np.array([]), np.nan, 0
+
     norms = np.linalg.norm(pupils, axis=0)
-    A = pupils / norms  # fails (NaN) if a column is zero
+    keep = norms > eps * norms.max() if norms.max() > 0 else np.zeros_like(norms, bool)
+    if keep.sum() == 0:
+        return 0, np.array([]), np.nan, 0
+
+    A = pupils[:, keep] / norms[keep]
     s = np.linalg.svd(A, compute_uv=False)
-    rank = np.linalg.matrix_rank(A, tol=None if tol is None else tol * s[0])
-    return rank, s, s[0] / s[-1]
+    rank = np.linalg.matrix_rank(A)
+    cond = s[0] / s[-1] if s[-1] > 0 else np.inf
+    return rank, s, cond
 
 
 # %% no SR
 
-pupils = split_pupils(calib_no_sr.D[:, 0], mask_no_sr)
+n_mode = 100
+
+pupils = split_pupils(calib_no_sr.D[:, n_mode], mask_no_sr)
 rank, s, cond = free_family_check(pupils)
 print(rank, s, cond)  # rank == 4 -> free family
+
+support = np.full(mask_no_sr.shape, np.nan)
+support[mask_no_sr] = calib_no_sr.D[:, n_mode]
+plt.figure()
+plt.imshow(support)
+plt.colorbar()
+plt.title(f"no SR mode {n_mode}")
 
 # %% SR
 
-pupils = split_pupils(calib_sr.D[:, 100], mask_sr)
+pupils = split_pupils(calib_sr.D[:, n_mode], mask_sr)
 rank, s, cond = free_family_check(pupils)
 print(rank, s, cond)  # rank == 4 -> free family
+
+support = np.full(mask_sr.shape, np.nan)
+support[mask_sr] = calib_sr.D[:, n_mode]
+plt.figure()
+plt.imshow(support)
+plt.colorbar()
+plt.title(f"SR mode {n_mode}")
+
+# %% no SR modified
+
+n_mode = 300
+
+pupils = split_pupils(imat_modified_no_sr[:, n_mode], mask_no_sr)
+rank, s, cond = free_family_check(pupils)
+print(rank, s, cond)  # rank == 4 -> free family
+
+support = np.full(mask_no_sr.shape, np.nan)
+support[mask_no_sr] = imat_modified_no_sr[:, n_mode]
+plt.figure()
+plt.imshow(support)
+plt.colorbar()
+plt.title(f"no SR mode {n_mode}")
+
+# %% SR modified
+
+pupils = split_pupils(imat_modified_sr[:, n_mode], mask_sr)
+rank, s, cond = free_family_check(pupils)
+print(rank, s, cond)  # rank == 4 -> free family
+
+support = np.full(mask_sr.shape, np.nan)
+support[mask_sr] = imat_modified_sr[:, n_mode]
+plt.figure()
+plt.imshow(support)
+plt.colorbar()
+plt.title(f"SR mode {n_mode}")
 
 # %% super resolved pyramid - define the pupil shifts to be applied to the WFS
 
