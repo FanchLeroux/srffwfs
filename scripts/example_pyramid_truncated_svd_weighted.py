@@ -67,7 +67,7 @@ n_actuator = 2 * n_subaperture  # number of actuators
 # ----------------------- WFS ---------------------- #
 
 modulation = 0.0  # [lambda/D] modulation radius or half grey width
-n_pix_separation = 10  # [pixel] separation ratio between the pupils
+n_pix_separation = 2  # [pixel] separation ratio between the pupils
 light_threshold = (
     0.3 if modulation > 0.0 else 0
 )  # light threshold to select the valid pixels
@@ -284,9 +284,9 @@ pupil_shifts_dict = {
     "alternative quincux": pupil_shifts_alternative_quincux,
 }
 
-# pupil_shifts_dict = {
-#     "alternative quincux": pupil_shifts_alternative_quincux,
-# }
+pupil_shifts_dict = {
+    "alternative quincux": pupil_shifts_alternative_quincux,
+}
 
 for key, value in pupil_shifts_dict.items():
 
@@ -354,7 +354,9 @@ for key, value in pupil_shifts_dict.items():
 
     # choose number of controlled modes
 
-    n_modes = int(2.0 * pyramid_sr.nSignal / 4)  # number of controlled modes
+    n_modes = int(
+        np.pi * (pyramid_sr.nSubap / 2) ** 2 * 2
+    )  # number of controlled modes
 
     # # compute classic lse reconstructor
     # reconstructor_lse = np.linalg.pinv(

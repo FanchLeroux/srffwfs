@@ -92,6 +92,7 @@ def compute_fourier_mode(
 
 def compute_fourier_basis(
     n_pixels: int,
+    n_subap: int | None = None,
     labels: list | None = None,
     remove_piston: bool = False,
     pupil_mask: np.ndarray | None = None,
@@ -102,7 +103,9 @@ def compute_fourier_basis(
     basis = []
 
     if labels is None:
-        labels = get_labels(n_pixels, remove_piston=remove_piston)
+        labels = get_labels(
+            n_subap if n_subap is not None else n_pixels, remove_piston=remove_piston
+        )
 
     for nu_x, nu_y, kind in labels:
         if kind == "piston" and remove_piston:
