@@ -33,10 +33,10 @@ fig_dir = config.root_dir / "outputs"
 
 # ---------------------- NGS ---------------------- #
 
-# phot.R4 = [0.670e-6, 0.300e-6, 7.66e12]
-wavelength = 670e-9  # [m] wavelength of the guide star
-optical_band = "R4"  # optical band of the guide star
-magnitude = 12  # magnitude of the guide star
+# phot.R = [0.640e-6, 0.150e-6, 4.01e12/cst]
+wavelength = 640e-9  # [m] wavelength of the guide star
+optical_band = "R"  # optical band of the guide star
+n_photons_per_controlled_mode = 2
 
 # ------------------ ATMOSPHERE ----------------- #
 
@@ -57,9 +57,7 @@ n_pixel_per_subaperture = (
 resolution = (
     n_subaperture * n_pixel_per_subaperture
 )  # resolution of the telescope driven by the WFS
-pupil_oversampling_factor: int = (
-    10  # oversampling the pupil then bin it to avoid edge effects
-)
+
 # ------------------------ DM ---------------------- #
 
 n_actuator = 2 * n_subaperture  # number of actuators
@@ -71,7 +69,7 @@ n_pix_separation = 2  # [pixel] separation ratio between the pupils
 light_threshold = (
     0.3 if modulation > 0.0 else 0
 )  # light threshold to select the valid pixels
-detector_photon_noise = False
+detector_photon_noise = True
 detector_read_out_noise = 0.0  # e- RMS
 
 # super resolution
@@ -90,6 +88,9 @@ loop_gain = 0.7
 n_iter = 200
 delay = 1
 loop_frequency = 1000  # [Hz] loop frequency
+n_controlled_modes = 1 * int(
+    np.pi * (n_subaperture / 2) ** 2
+)  # number of controlled modes
 
 # %% Build objects
 
@@ -101,13 +102,6 @@ tel = Telescope(
     diameter=diameter,  # [m] telescope diameter
     samplingTime=1 / loop_frequency,  # [s] sampling time of the telescope
 )
-pupil_oversampled = get_circular_pupil(tel.resolution * pupil_oversampling_factor)
-pupil_binned = pupil_oversampled.reshape(
-    tel.resolution,
-    pupil_oversampling_factor,
-    tel.resolution,
-    pupil_oversampling_factor,
-).mean(axis=(1, 3))
 
 # %% -----------------------     NGS   ----------------------------------
 
@@ -115,8 +109,8 @@ pupil_binned = pupil_oversampled.reshape(
 ngs = Source(
     optBand=optical_band,  # Source optical band
     # (see photometry.py)
-    magnitude=magnitude,
-)  # Source Magnitude
+    magnitude=0.0,
+)  # Source Magnitude. Will be updated to match the number of photons per controlled mode
 
 # % -----------------------    ATMOSPHERE   ----------------------------
 
@@ -166,7 +160,6 @@ science_camera = Detector(
     nRes=tel.resolution, psf_sampling=4, integrationTime=1 / loop_frequency
 )
 
-
 # %% ----------------------- Pyramid ---------------------------- #
 
 # pyramid
@@ -180,6 +173,26 @@ pyramid_sr = Pyramid(
 )
 
 reference_intensities_2d_no_sr = pyramid_sr.referenceSignal_2D
+
+# %% Define flux
+
+telescope_surface = tel.pupil.sum() * tel.pixelSize * tel.pixelSize
+n_measurement_points = int(np.sum(pyramid_sr.validSignal) / 4)
+
+ngs.nPhoton = (
+    n_photons_per_controlled_mode
+    * loop_frequency
+    / (telescope_surface / n_controlled_modes)
+)  # nPhoton = # photons per s per m2
+
+
+ngs**tel * dm * pyramid_sr  # coupling telescope, DM and WFS is mandatory to compute the number of photons per measurement point
+
+print(
+    f"# photons per second per m^2: {ngs.nPhoton}\n"
+    f"# photons per controlled mode per frame: {pyramid_sr.cam.frame.sum() / n_controlled_modes}\n"
+    f"# photons per measurement points per frame: {pyramid_sr.cam.frame.sum() / n_measurement_points}"
+)
 
 # %% super resolved pyramid - define the pupil shifts to be applied to the WFS
 
@@ -353,21 +366,15 @@ for key, value in pupil_shifts_dict.items():
         f"Interaction matrix rank: {np.linalg.matrix_rank(interaction_matrix)}"
     )
 
-    # choose number of controlled modes
-
-    n_modes = 3 * int(
-        np.pi * (pyramid_sr.nSubap / 2) ** 2
-    )  # number of controlled modes
-
     # # compute classic lse reconstructor
     # reconstructor_lse = np.linalg.pinv(
-    #     interaction_matrix[:, :n_modes]
+    #     interaction_matrix[:, :n_controlled_modes]
     # )  # unweighted LSE reconstructor
     # reconstructor_lse = np.concatenate(
     #     (
     #         reconstructor_lse,
     #         np.zeros(
-    #             (interaction_matrix.shape[1] - n_modes, reconstructor_lse.shape[1])
+    #             (interaction_matrix.shape[1] - n_controlled_modes, reconstructor_lse.shape[1])
     #         ),
     #     ),
     #     axis=0,
@@ -377,11 +384,13 @@ for key, value in pupil_shifts_dict.items():
     L = np.linalg.cholesky(c_phi)
     A = interaction_matrix @ L
     U, s, Vh = np.linalg.svd(A, full_matrices=False)
-    U_k = U[:, :n_modes]
-    s_k = s[:n_modes]
-    Vh_k = Vh[:n_modes, :]
+    U_k = U[:, :n_controlled_modes]
+    s_k = s[:n_controlled_modes]
+    Vh_k = Vh[:n_controlled_modes, :]
     reconstructor_lse = L @ Vh_k.T / s_k @ U_k.T
-    T = L @ Vh_k.T  # (n_cal, n_modes): control modes in original-basis coefficients
+    T = (
+        L @ Vh_k.T
+    )  # (n_cal, n_controlled_modes): control modes in original-basis coefficients
     control_basis = calibration_basis @ T  # control modes in phase space
     modal_projector_ctrl = np.linalg.pinv(
         control_basis
@@ -465,7 +474,7 @@ for key, value in pupil_shifts_dict.items():
         cmap="inferno",
     )
     plt.title(
-        f"long_exposure_psf_lse_sr\nPyramid - {n_modes} controlled modes\n{key} shifts"
+        f"long_exposure_psf_lse_sr\nPyramid - {n_controlled_modes} controlled modes\n{key} shifts"
     )
     plt.savefig(fig_dir / f"long_exposure_psf{key}_shifts.png", bbox_inches="tight")
 
