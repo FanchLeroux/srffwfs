@@ -606,7 +606,7 @@ plt.title(f"SR mode {n_mode}")
 
 # %% no SR modified
 
-n_mode = 300
+n_mode = 100
 
 pupils = split_pupils(imat_modified_no_sr[:, n_mode], mask_no_sr)
 rank, s, cond = free_family_check(pupils)
@@ -631,6 +631,21 @@ plt.figure()
 plt.imshow(support)
 plt.colorbar()
 plt.title(f"SR mode {n_mode}")
+
+# %% test a SVD of the interaction matrix without the sensitivity information
+
+imat_equal_sensi = calib_no_sr.D.copy()
+imat_equal_sensi = imat_equal_sensi / np.linalg.norm(
+    imat_equal_sensi, axis=0, keepdims=True
+)
+
+u, s, vh = np.linalg.svd(imat_equal_sensi, full_matrices=False)
+plt.figure()
+plt.semilogy(s)
+plt.title("SVD of interaction matrix without sensitivity information")
+plt.xlabel("Singular value index")
+plt.ylabel("Singular value")
+plt.show()
 
 # %% super resolved pyramid - define the pupil shifts to be applied to the WFS
 

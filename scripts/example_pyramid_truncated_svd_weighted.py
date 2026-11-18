@@ -66,7 +66,7 @@ n_actuator = 2 * n_subaperture  # number of actuators
 
 # ----------------------- WFS ---------------------- #
 
-modulation = 0.0  # [lambda/D] modulation radius or half grey width
+modulation = 3.0  # [lambda/D] modulation radius or half grey width
 n_pix_separation = 2  # [pixel] separation ratio between the pupils
 light_threshold = (
     0.3 if modulation > 0.0 else 0
@@ -285,7 +285,8 @@ pupil_shifts_dict = {
 }
 
 pupil_shifts_dict = {
-    "alternative quincux": pupil_shifts_alternative_quincux,
+    "zeros": pupil_shifts_zeros,
+    "hv": pupil_shifts_hv,
 }
 
 for key, value in pupil_shifts_dict.items():
