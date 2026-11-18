@@ -89,7 +89,7 @@ n_iter = 200
 delay = 1
 loop_frequency = 1000  # [Hz] loop frequency
 n_controlled_modes = int(
-    0.8 * np.pi * (n_subaperture / 2) ** 2
+    1.0 * np.pi * (n_subaperture / 2) ** 2
 )  # number of controlled modes
 use_weighted_svd = False  # use weighted truncated SVD reconstructor
 
@@ -174,6 +174,7 @@ pyramid_sr = Pyramid(
 )
 
 reference_intensities_2d_no_sr = pyramid_sr.referenceSignal_2D
+valid_signal_2d_no_sr = pyramid_sr.valid_signal_2D
 
 # %% Define flux
 
@@ -299,7 +300,7 @@ pupil_shifts_dict = {
 }
 
 pupil_shifts_dict = {
-    "hv": pupil_shifts_quincux,
+    "hv": pupil_shifts_hv,
     "zeros": pupil_shifts_zeros,
 }
 
@@ -319,14 +320,22 @@ for key, value in pupil_shifts_dict.items():
     )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
     pyramid_sr.modulation = modulation  # update reference intensities etc.
     reference_intensities_2d_sr = pyramid_sr.referenceSignal_2D
+    valid_signal_2d_sr = pyramid_sr.valid_signal_2D
 
     plt.figure()
     plt.imshow(reference_intensities_2d_sr)
+    plt.title(f"Reference intensities\nsuper resolved pyramid\n{key} shifts")
 
     plt.figure()
     plt.imshow(reference_intensities_2d_sr - reference_intensities_2d_no_sr)
     plt.title(
-        f"reference intensities difference\nsuper resolved pyramid - pyramid\n{key} shifts"
+        f"Reference intensities difference\nsuper resolved pyramid - pyramid\n{key} shifts"
+    )
+
+    plt.figure()
+    plt.imshow(~(valid_signal_2d_sr == valid_signal_2d_no_sr))
+    plt.title(
+        f"Valid signal difference\nsuper resolved pyramid - pyramid\n{key} shifts"
     )
 
     pupil_1 = deepcopy(pyramid_sr.valid_signal_2D)
@@ -386,13 +395,13 @@ for key, value in pupil_shifts_dict.items():
         s_k = s[:n_controlled_modes]
         Vh_k = Vh[:n_controlled_modes, :]
         reconstructor_lse = L @ Vh_k.T / s_k @ U_k.T
-        T = (
-            L @ Vh_k.T
-        )  # (n_cal, n_controlled_modes): control modes in original-basis coefficients
-        control_basis = calibration_basis @ T  # control modes in phase space
-        modal_projector_ctrl = np.linalg.pinv(
-            control_basis
-        )  # phase -> control-mode coefficients z
+        # T = (
+        #     L @ Vh_k.T
+        # )  # (n_cal, n_controlled_modes): control modes in original-basis coefficients
+        # control_basis = calibration_basis @ T  # control modes in phase space
+        # modal_projector_ctrl = np.linalg.pinv(
+        #     control_basis
+        # )  # phase -> control-mode coefficients z
 
         # phase -> coefficients on the ORIGINAL basis, restricted to the controlled subspace
         # modal_projector = T @ modal_projector_ctrl  # (n_cal, n_pix)
