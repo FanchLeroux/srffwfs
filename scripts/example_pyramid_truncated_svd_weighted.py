@@ -36,7 +36,7 @@ fig_dir = config.root_dir / "outputs"
 # phot.R = [0.640e-6, 0.150e-6, 4.01e12/cst]
 wavelength = 640e-9  # [m] wavelength of the guide star
 optical_band = "R"  # optical band of the guide star
-n_photons_per_controlled_mode = 4
+n_photons_per_controlled_mode = 2
 
 # ------------------ ATMOSPHERE ----------------- #
 
@@ -69,11 +69,20 @@ n_pix_separation = 2  # [pixel] separation ratio between the pupils
 light_threshold = (
     0.3 if modulation > 0.0 else 0
 )  # light threshold to select the valid pixels
-detector_photon_noise = True
+detector_photon_noise = False
 detector_read_out_noise = 0.0  # e- RMS
 
 # super resolution
 sr_amplitude = 0.25  # [pixel] super resolution shifts amplitude
+
+# ----------------------- SCIENCE CAMERA ---------------------- #
+
+science_camera_psf_sampling = (
+    4  # [pixel per lambda/D] sampling of the PSF in the science camera
+)
+science_camera_resolution = (
+    3 * science_camera_psf_sampling * n_actuator
+)  # [pixel] resolution of the science camera
 
 # -------------------- CALIBRATION - MODAL BASIS ---------------- #
 
@@ -89,9 +98,9 @@ n_iter = 200
 delay = 1
 loop_frequency = 1000  # [Hz] loop frequency
 n_controlled_modes = int(
-    2 * np.pi * (n_subaperture / 2) ** 2
+    1.5 * np.pi * (n_subaperture / 2) ** 2
 )  # number of controlled modes
-use_weighted_svd = False  # use weighted truncated SVD reconstructor
+use_weighted_svd = True  # use weighted truncated SVD reconstructor
 
 # %% Build objects
 
@@ -158,7 +167,11 @@ modal_dm = DeformableMirror(tel, nSubap=n_actuator, modes=calibration_basis)
 # % ----------------------- Science camera ---------------------------- #
 
 science_camera = Detector(
-    nRes=tel.resolution, psf_sampling=4, integrationTime=1 / loop_frequency
+    nRes=science_camera_resolution,
+    psf_sampling=science_camera_psf_sampling,
+    integrationTime=1 / loop_frequency,
+    readoutNoise=0.0,  # [e-] RMS
+    photonNoise=False,  # no photon noise in the science camera
 )
 
 # %% ----------------------- Pyramid ---------------------------- #
@@ -299,10 +312,10 @@ pupil_shifts_dict = {
     "alternative quincux": pupil_shifts_alternative_quincux,
 }
 
-pupil_shifts_dict = {
-    "hv": pupil_shifts_hv,
-    "zeros": pupil_shifts_zeros,
-}
+# pupil_shifts_dict = {
+#     "hv": pupil_shifts_hv,
+#     "zeros": pupil_shifts_zeros,
+# }
 
 for key, value in pupil_shifts_dict.items():
 
@@ -504,7 +517,7 @@ for key, value in pupil_shifts_dict.items():
     # long exposure PSF
     plt.figure()
     plt.imshow(
-        crop_array(np.log(long_exposure_psf_lse_sr), 100),
+        np.log(long_exposure_psf_lse_sr),
         norm="linear",
         cmap="inferno",
     )
