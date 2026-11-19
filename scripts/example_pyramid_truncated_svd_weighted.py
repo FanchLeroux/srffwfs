@@ -98,7 +98,7 @@ n_iter = 200
 delay = 1
 loop_frequency = 1000  # [Hz] loop frequency
 n_controlled_modes = int(
-    1.5 * np.pi * (n_subaperture / 2) ** 2
+    2.0 * np.pi * (n_subaperture / 2) ** 2
 )  # number of controlled modes
 use_weighted_svd = True  # use weighted truncated SVD reconstructor
 
@@ -312,10 +312,10 @@ pupil_shifts_dict = {
     "alternative quincux": pupil_shifts_alternative_quincux,
 }
 
-# pupil_shifts_dict = {
-#     "hv": pupil_shifts_hv,
-#     "zeros": pupil_shifts_zeros,
-# }
+pupil_shifts_dict = {
+    "zeros": pupil_shifts_zeros,
+    "hv": pupil_shifts_hv,
+}
 
 for key, value in pupil_shifts_dict.items():
 
@@ -419,6 +419,13 @@ for key, value in pupil_shifts_dict.items():
         # phase -> coefficients on the ORIGINAL basis, restricted to the controlled subspace
         # modal_projector = T @ modal_projector_ctrl  # (n_cal, n_pix)
         # print("modal projector computed!")
+        plt.figure()
+        plt.plot(s)
+        plt.yscale("log")
+        plt.title(f"Singular values of the weighted interaction matrix\n{key} shifts")
+        plt.xlabel("# modes")
+        plt.ylabel("Singular value")
+        plt.axvline(x=n_controlled_modes, color="r", linestyle="--", label="modal cutoff")
 
     else:
         # compute classic lse reconstructor
