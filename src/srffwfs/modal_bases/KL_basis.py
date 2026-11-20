@@ -14,6 +14,7 @@ def compute_KL_basis(
     atm: Atmosphere,
     dm: DeformableMirror,
     return_covariance: bool = False,
+    n_batch: int = 1,
 ) -> np.ndarray:
 
     M2C_KL_full, HHt, PSD_atm, df = compute_M2C(
@@ -31,7 +32,7 @@ def compute_KL_basis(
         ortho_spm=True,
         SZ=np.int64(2 * tel.OPD.shape[0]),
         nZer=3,
-        NDIVL=1,
+        NDIVL=n_batch,
         lim_inversion=1e-16,
         returnHHt_PSD_df=True,
         save_output=False,

@@ -122,7 +122,7 @@ n_photons_per_controlled_mode = 100
 
 # ------------------ ATMOSPHERE ----------------- #
 
-r0 = 0.1  # [m] value of r0 at 500 nm
+r0 = 0.15  # [m] value of r0 at 500 nm
 external_scale = 30  # [m] value of L0 in the visibile
 fractional_r0 = [0.45, 0.1, 0.1, 0.25, 0.1]  # Cn2 profile (percentage)
 wind_speed = [5, 4, 8, 10, 2]  # [m.s-1] wind speed of layers
@@ -231,7 +231,7 @@ dm = DeformableMirror(tel, nSubap=n_actuator)
 # ------------------------- MODAL BASIS -------------------------------
 
 if modal_basis == "KL":
-    m2c, c_phi = compute_KL_basis(tel, atm, dm, return_covariance=True)
+    m2c, c_phi = compute_KL_basis(tel, atm, dm, return_covariance=True, n_batch=2)
     ngs**tel  # reset
 
 elif modal_basis == "poke":
@@ -568,8 +568,11 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
         norm="linear",
         cmap="inferno",
     )
+    n_controlled_modes_str = (
+        "MAP" if use_map else f"{n_controlled_modes} controlled modes"
+    )
     plt.title(
-        f"long_exposure_psf_lse_sr\nPyramid - {n_controlled_modes} controlled modes\n{shift_name} shifts"
+        f"long_exposure_psf_lse_sr\nPyramid - {n_controlled_modes_str}\n{shift_name} shifts"
     )
     plt.savefig(
         fig_dir / f"long_exposure_psf{shift_name}_shifts.png",
