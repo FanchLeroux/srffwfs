@@ -17,6 +17,7 @@ from OOPAO.Atmosphere import Atmosphere
 from OOPAO.Source import Source
 from OOPAO.DeformableMirror import DeformableMirror
 from OOPAO.Pyramid import Pyramid
+from OOPAO.BioEdge import BioEdge
 from OOPAO.Detector import Detector
 from OOPAO.calibration.InteractionMatrix import InteractionMatrix
 
@@ -30,9 +31,9 @@ from srffwfs.miscellaneous import pad_array, crop_array
 
 
 @dataclass
-class CalibratedPyramid:
+class CalibratedWfs:
     name: str
-    wfs: Pyramid
+    wfs: Pyramid | BioEdge
     interaction_matrix: np.ndarray
 
 
@@ -269,9 +270,20 @@ pyramid = Pyramid(
     postProcessing="fullFrame",
 )
 
-n_measurement_points = int(np.sum(pyramid.validSignal) / 4)
-reference_intensities_2d_no_sr = pyramid.referenceSignal_2D
-valid_signal_2d_no_sr = pyramid.valid_signal_2D
+bioedge = BioEdge(
+    nSubap=n_subaperture,
+    telescope=tel,
+    modulation=0,
+    lightRatio=light_threshold,
+    n_pix_separation=n_pix_separation,
+    postProcessing="fullFrame",
+    grey_width=modulation,
+)
+
+n_measurement_points_pyramid = int(np.sum(pyramid.validSignal) / 4)
+n_measurement_points_bioedge = int(np.sum(bioedge.validSignal) / 4)
+reference_intensities_2d_no_sr_pyramid = pyramid.referenceSignal_2D
+reference_intensities_2d_no_sr_bioedge = bioedge.referenceSignal_2D
 
 # %% super resolved pyramid - define the pupil shifts to be applied to the WFS
 
@@ -377,13 +389,12 @@ pupil_shifts_dict = {
 
 # %% Precompute shifted and calibrated WFS for every configuration.
 
-calibrated_pyramids: dict[str, CalibratedPyramid] = {}
+calibrated_pyramids: dict[str, CalibratedWfs] = {}
+calibrated_bioedges: dict[str, CalibratedWfs] = {}
 
 for shift_name, pupil_shifts in tqdm(pupil_shifts_dict.items()):
-    dm.coefs = 0
-    ngs**tel  # flat wavefront
 
-    wfs = Pyramid(
+    pyramid = Pyramid(
         nSubap=n_subaperture,
         telescope=tel,
         modulation=modulation,
@@ -391,16 +402,30 @@ for shift_name, pupil_shifts in tqdm(pupil_shifts_dict.items()):
         n_pix_separation=n_pix_separation,
         postProcessing="fullFrame",
     )
-    ngs**tel * dm * wfs
 
-    wfs.apply_shift_wfs(pupil_shifts[0], pupil_shifts[1], units="pixels")
-    wfs.modulation = modulation
+    bioedge = BioEdge(
+        nSubap=n_subaperture,
+        telescope=tel,
+        modulation=0,
+        lightRatio=light_threshold,
+        n_pix_separation=n_pix_separation,
+        postProcessing="fullFrame",
+        grey_width=modulation,
+    )
 
-    calibration = InteractionMatrix(
+    pyramid.apply_shift_wfs(pupil_shifts[0], pupil_shifts[1], units="pixels")
+    pyramid.modulation = modulation  # update reference intensities
+
+    bioedge.apply_shift_wfs(
+        pupil_shifts[0], pupil_shifts[1], units="pixels"
+    )  # to be redifined
+    bioedge.modulation = 0
+
+    calibration_pyramid = InteractionMatrix(
         ngs,
         tel,
         modal_dm,
-        wfs,
+        pyramid,
         M2C=np.diag(np.ones(modal_dm.nValidAct)),
         stroke=stroke,
         single_pass=single_pass,
@@ -408,17 +433,32 @@ for shift_name, pupil_shifts in tqdm(pupil_shifts_dict.items()):
         display=True,
         invert=False,
     )
-    interaction_matrix = calibration.D
+    interaction_matrix_pyramid = calibration_pyramid.D
 
-    print(
-        f"Interaction matrix shape: {interaction_matrix.shape}\n"
-        f"Interaction matrix rank: {np.linalg.matrix_rank(interaction_matrix)}"
+    calibration_bioedge = InteractionMatrix(
+        ngs,
+        tel,
+        modal_dm,
+        bioedge,
+        M2C=np.diag(np.ones(modal_dm.nValidAct)),
+        stroke=stroke,
+        single_pass=single_pass,
+        noise="off",
+        display=True,
+        invert=False,
+    )
+    interaction_matrix_bioedge = calibration_bioedge.D
+
+    calibrated_pyramids[shift_name] = CalibratedWfs(
+        name=shift_name,
+        wfs=pyramid,
+        interaction_matrix=interaction_matrix_pyramid,
     )
 
-    calibrated_pyramids[shift_name] = CalibratedPyramid(
+    calibrated_bioedges[shift_name] = CalibratedWfs(
         name=shift_name,
-        wfs=wfs,
-        interaction_matrix=interaction_matrix,
+        wfs=bioedge,
+        interaction_matrix=interaction_matrix_bioedge,
     )
 
 # %% Closed-loop tests
@@ -444,7 +484,7 @@ print(
     f"Read-out noise: {detector_read_out_noise}\n"
     f"# photons per second per m^2: {ngs.nPhoton}\n"
     f"# photons per controlled mode per frame: {n_photons_per_frame / n_controlled_modes}\n"
-    f"# photons per measurement points per frame: {n_photons_per_frame / n_measurement_points}"
+    f"# photons per measurement points per frame: {n_photons_per_frame / n_measurement_points_pyramid}"
 )
 
 for shift_name, calibrated_pyramid in calibrated_pyramids.items():
@@ -479,15 +519,17 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
             interaction_matrix, n_controlled_modes
         )
 
-    reference_intensities_2d_sr = calibrated_pyramid.wfs.referenceSignal_2D
-    valid_signal_2d_sr = calibrated_pyramid.wfs.valid_signal_2D
+    reference_intensities_2d_sr_pyramid = calibrated_pyramid.wfs.referenceSignal_2D
+    valid_signal_2d_sr_pyramid = calibrated_pyramid.wfs.valid_signal_2D
 
     plt.figure()
-    plt.imshow(reference_intensities_2d_sr)
+    plt.imshow(reference_intensities_2d_sr_pyramid)
     plt.title(f"Reference intensities\nsuper resolved pyramid\n{shift_name} shifts")
 
     plt.figure()
-    plt.imshow(reference_intensities_2d_sr - reference_intensities_2d_no_sr)
+    plt.imshow(
+        reference_intensities_2d_sr_pyramid - reference_intensities_2d_no_sr_pyramid
+    )
     plt.title(
         f"Reference intensities difference\nsuper resolved pyramid - pyramid\n{shift_name} shifts"
     )
@@ -529,6 +571,172 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
     # noise propagation
     plt.figure()
     plt.plot(np.diag(reconstructor @ reconstructor.T) / calibrated_pyramid.wfs.nSignal)
+    plt.yscale("log")
+    plt.title(f"modal uniform noise propagation\n{shift_name} shifts")
+    plt.xlabel("# modes")
+    plt.savefig(fig_dir / "noise_propagation.png", bbox_inches="tight")
+
+    fitting_error = (
+        np.std(
+            closed_loop_results.fitting_limited_phase_screens[tel.pupil.flatten(), :],
+            axis=0,
+        )
+        if modal_projector is not None
+        else 0.0
+    )
+    # residuals
+    plt.figure()
+    plt.plot(closed_loop_results.total, label="total")
+    plt.plot(closed_loop_results.residual, label="residual")
+    plt.plot(fitting_error, label="fitting error")
+    plt.xlabel("loop iteration")
+    plt.ylabel("residual phase RMS [nm]")
+    plt.title(f"Closed Loop residuals\n{shift_name} shifts")
+    plt.legend()
+    plt.savefig(fig_dir / "residuals.png", bbox_inches="tight")
+
+    # strehls
+    plt.figure()
+    plt.plot(closed_loop_results.strehl, label="strehl")
+    plt.ylabel("strehl phase RMS [nm]")
+    plt.title(f"Closed Loop strehls\n{shift_name} shifts")
+    plt.legend()
+    plt.savefig(fig_dir / "strehls.png", bbox_inches="tight")
+
+    # long exposure PSF
+    plt.figure()
+    plt.imshow(
+        np.log(long_exposure_psf_lse_sr),
+        norm="linear",
+        cmap="inferno",
+    )
+    n_controlled_modes_str = (
+        "MAP" if use_map else f"{n_controlled_modes} controlled modes"
+    )
+    plt.title(
+        f"long_exposure_psf_lse_sr\nPyramid - {n_controlled_modes_str}\n{shift_name} shifts"
+    )
+    plt.savefig(
+        fig_dir / f"long_exposure_psf{shift_name}_shifts.png",
+        bbox_inches="tight",
+    )
+
+    if modal_projector is not None:
+        # ideal coronograph fitting limited
+        pupil = tel.pupil.astype(float)
+        n_pix, pad = tel.resolution, 2
+        opd = (
+            closed_loop_results.fitting_limited_phase_screens.copy()
+        )  # (n_pix**2, n_iter)
+        field = pupil.reshape(-1, 1) * np.exp(1j * 2 * np.pi / ngs.wavelength * opd)
+        field = field.reshape(n_pix, n_pix, -1)  # zero outside the pupil
+        # ideal coronagraph: remove the pupil mode, E - <E,P>/<P,P> * P
+        field -= (
+            np.sum(pupil[..., None] * field, axis=(0, 1)) / np.sum(pupil**2)
+        ) * pupil[..., None]
+        # long-exposure PSF
+        psf_le = np.mean(
+            np.abs(
+                np.fft.fftshift(
+                    np.fft.fft2(field, s=(pad * n_pix,) * 2, axes=(0, 1)), axes=(0, 1)
+                )
+            )
+            ** 2,
+            axis=2,
+        )
+        psf_le /= (
+            np.abs(np.fft.fft2(pupil, s=(pad * n_pix,) * 2)).max() ** 2
+        )  # normalise by diffraction-limited peak
+        plt.figure()
+        plt.imshow(psf_le, norm="linear", cmap="inferno")
+        plt.title(
+            f"long exposure psf fitting limited ideal coronagraph\n{shift_name} shifts"
+        )
+
+for shift_name, calibrated_bioedge in calibrated_bioedges.items():
+    interaction_matrix = calibrated_bioedge.interaction_matrix
+
+    if use_weighted_svd and not use_map:
+        reconstructor, singular_values = compute_weighted_truncated_svd_reconstructor(
+            interaction_matrix, c_phi, n_controlled_modes
+        )
+
+        plt.figure()
+        plt.plot(singular_values)
+        plt.yscale("log")
+        plt.title(
+            f"Singular values of the weighted interaction matrix\n{shift_name} shifts"
+        )
+        plt.xlabel("# modes")
+        plt.ylabel("Singular value")
+        plt.axvline(
+            x=n_controlled_modes, color="r", linestyle="--", label="modal cutoff"
+        )
+
+    if use_map:
+        reconstructor = compute_map_reconstructor(
+            interaction_matrix,
+            c_phi,
+            (detector_read_out_noise / n_photons_per_frame) ** 2,
+        )
+
+    else:
+        reconstructor = compute_lse_reconstructor(
+            interaction_matrix, n_controlled_modes
+        )
+
+    reference_intensities_2d_sr_bioedge = calibrated_bioedge.wfs.referenceSignal_2D
+    valid_signal_2d_sr_bioedge = calibrated_bioedge.wfs.valid_signal_2D
+
+    plt.figure()
+    plt.imshow(reference_intensities_2d_sr_bioedge)
+    plt.title(f"Reference intensities\nsuper resolved pyramid\n{shift_name} shifts")
+
+    plt.figure()
+    plt.imshow(
+        reference_intensities_2d_sr_bioedge - reference_intensities_2d_no_sr_bioedge
+    )
+    plt.title(
+        f"Reference intensities difference\nsuper resolved pyramid - pyramid\n{shift_name} shifts"
+    )
+
+    dm.coefs = 0
+    calibrated_bioedge.wfs.cam.photonNoise = False
+    calibrated_bioedge.wfs.cam.readoutNoise = 0.0
+    ngs**tel
+
+    closed_loop_results = close_the_loop(
+        ngs,
+        atm,
+        tel,
+        modal_dm,
+        calibrated_bioedge.wfs,
+        reconstructor,
+        loop_gain,
+        n_iter,
+        delay=delay,
+        photon_noise=detector_photon_noise,
+        read_out_noise=detector_read_out_noise,
+        polc=True,
+        interaction_matrix=interaction_matrix,
+        seed=seed,
+        save_telemetry=True,
+        save_psf=True,
+        science_camera=science_camera,
+        modal_projector=modal_projector,
+    )
+
+    # post processing
+
+    long_exposure_psf_lse_sr = np.sum(
+        closed_loop_results.short_exposure_psf[:, :, 100:], axis=2
+    )
+
+    # plots
+
+    # noise propagation
+    plt.figure()
+    plt.plot(np.diag(reconstructor @ reconstructor.T) / calibrated_bioedge.wfs.nSignal)
     plt.yscale("log")
     plt.title(f"modal uniform noise propagation\n{shift_name} shifts")
     plt.xlabel("# modes")
