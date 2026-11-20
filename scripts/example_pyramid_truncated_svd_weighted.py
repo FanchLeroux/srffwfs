@@ -26,6 +26,44 @@ from srffwfs.sensitivity import compute_photon_noise_sensitivity
 from srffwfs.closed_loop import close_the_loop, ClosedLoopResult
 from srffwfs.miscellaneous import pad_array, crop_array
 
+# %% Class definitions
+
+
+@dataclass
+class CalibratedPyramid:
+    name: str
+    wfs: Pyramid
+    interaction_matrix: np.ndarray
+
+
+# %% Fucntions definitions
+
+
+def compute_weighted_truncated_svd_reconstructor():
+    return
+
+
+def compute_lse_reconstructor(interaction_matrix, n_controlled_modes):
+    reconstructor_lse = np.linalg.pinv(interaction_matrix[:, :n_controlled_modes])
+    reconstructor_lse = np.concatenate(
+        (
+            reconstructor_lse,
+            np.zeros(
+                (
+                    interaction_matrix.shape[1] - n_controlled_modes,
+                    reconstructor_lse.shape[1],
+                )
+            ),
+        ),
+        axis=0,
+    )
+    return reconstructor_lse
+
+
+def compute_map_reconstructor():
+    return
+
+
 # %% outputs directory
 
 config = Config()
@@ -114,8 +152,9 @@ tel = Telescope(
     diameter=diameter,  # [m] telescope diameter
     samplingTime=1 / loop_frequency,  # [s] sampling time of the telescope
 )
+telescope_surface = tel.pupil.sum() * tel.pixelSize * tel.pixelSize
 
-# %% -----------------------     NGS   ----------------------------------
+# % -----------------------     NGS   ----------------------------------
 
 # create the Natural Guide Star object
 ngs = Source(
@@ -127,7 +166,7 @@ ngs = Source(
 # % -----------------------    ATMOSPHERE   ----------------------------
 
 # coupling telescope and source is mandatory to generate Atmosphere object
-ngs * tel
+ngs**tel
 
 # create the Atmosphere object
 atm = Atmosphere(
@@ -179,7 +218,7 @@ science_camera = Detector(
 # %% ----------------------- Pyramid ---------------------------- #
 
 # pyramid
-pyramid_sr = Pyramid(
+pyramid = Pyramid(
     nSubap=n_subaperture,
     telescope=tel,
     modulation=modulation,
@@ -188,28 +227,9 @@ pyramid_sr = Pyramid(
     postProcessing="fullFrame",
 )
 
-reference_intensities_2d_no_sr = pyramid_sr.referenceSignal_2D
-valid_signal_2d_no_sr = pyramid_sr.valid_signal_2D
-
-# %% Define flux
-
-telescope_surface = tel.pupil.sum() * tel.pixelSize * tel.pixelSize
-n_measurement_points = int(np.sum(pyramid_sr.validSignal) / 4)
-
-ngs.nPhoton = (
-    n_photons_per_controlled_mode
-    * loop_frequency
-    / (telescope_surface / n_controlled_modes)
-)  # nPhoton = # photons per s per m2
-
-
-ngs**tel * dm * pyramid_sr  # coupling telescope, DM and WFS is mandatory to compute the number of photons per measurement point
-
-print(
-    f"# photons per second per m^2: {ngs.nPhoton}\n"
-    f"# photons per controlled mode per frame: {pyramid_sr.cam.frame.sum() / n_controlled_modes}\n"
-    f"# photons per measurement points per frame: {pyramid_sr.cam.frame.sum() / n_measurement_points}"
-)
+n_measurement_points = int(np.sum(pyramid.validSignal) / 4)
+reference_intensities_2d_no_sr = pyramid.referenceSignal_2D
+valid_signal_2d_no_sr = pyramid.valid_signal_2D
 
 # %% super resolved pyramid - define the pupil shifts to be applied to the WFS
 
@@ -303,28 +323,16 @@ pupil_shifts_alternative_quincux = [
     ],
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
-# %%
-
+# define a dictionary to loop over the different pupil shifts configurations
 pupil_shifts_dict = {
     "zeros": pupil_shifts_zeros,
     "horizontal": pupil_shifts_horizontal,
-    "vertical": pupil_shifts_vertical,
     "hv": pupil_shifts_hv,
     "quincux": pupil_shifts_quincux,
-    "alternative quincux": pupil_shifts_alternative_quincux,
 }
 
 
-# %% Precompute one shifted and calibrated WFS for every configuration.
-# Loop parameters below can be changed without repeating these calibrations.
-
-
-@dataclass
-class CalibratedPyramid:
-    name: str
-    wfs: Pyramid
-    interaction_matrix: np.ndarray
-
+# %% Precompute shifted and calibrated WFS for every configuration.
 
 calibrated_pyramids: dict[str, CalibratedPyramid] = {}
 
@@ -370,11 +378,26 @@ for shift_name, pupil_shifts in tqdm(pupil_shifts_dict.items()):
         interaction_matrix=interaction_matrix,
     )
 
-# %% Closed-loop parameter sweep.
-# This section never recalibrates; it only reuses the shifted WFS setups above.
+# %% Closed-loop tests
 
 modal_projector = None
 seed = 12
+use_weighted_svd = False
+
+# set flux of the ngs
+ngs.nPhoton = (
+    n_photons_per_controlled_mode
+    * loop_frequency
+    / (telescope_surface / n_controlled_modes)
+)  # nPhoton = # photons per s per m2
+
+ngs**tel * dm * pyramid  # coupling telescope, DM and WFS is mandatory to compute the number of photons per measurement point
+
+print(
+    f"# photons per second per m^2: {ngs.nPhoton}\n"
+    f"# photons per controlled mode per frame: {pyramid.cam.frame.sum() / n_controlled_modes}\n"
+    f"# photons per measurement points per frame: {pyramid.cam.frame.sum() / n_measurement_points}"
+)
 
 for shift_name, calibrated_pyramid in calibrated_pyramids.items():
     interaction_matrix = calibrated_pyramid.interaction_matrix
@@ -400,18 +423,8 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
             x=n_controlled_modes, color="r", linestyle="--", label="modal cutoff"
         )
     else:
-        reconstructor_lse = np.linalg.pinv(interaction_matrix[:, :n_controlled_modes])
-        reconstructor_lse = np.concatenate(
-            (
-                reconstructor_lse,
-                np.zeros(
-                    (
-                        interaction_matrix.shape[1] - n_controlled_modes,
-                        reconstructor_lse.shape[1],
-                    )
-                ),
-            ),
-            axis=0,
+        reconstructor_lse = compute_lse_reconstructor(
+            interaction_matrix, n_controlled_modes
         )
 
     reference_intensities_2d_sr = calibrated_pyramid.wfs.referenceSignal_2D
