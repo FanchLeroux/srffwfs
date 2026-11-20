@@ -465,7 +465,7 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
         delay=delay,
         photon_noise=detector_photon_noise,
         read_out_noise=detector_read_out_noise,
-        polc=False,
+        polc=True,
         interaction_matrix=calibrated_pyramid.interaction_matrix,
         seed=seed,
         save_telemetry=True,
