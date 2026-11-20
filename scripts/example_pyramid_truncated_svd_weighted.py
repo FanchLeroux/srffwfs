@@ -118,7 +118,7 @@ fig_dir = config.root_dir / "outputs"
 # phot.R = [0.640e-6, 0.150e-6, 4.01e12/cst]
 wavelength = 640e-9  # [m] wavelength of the guide star
 optical_band = "R"  # optical band of the guide star
-n_photons_per_controlled_mode = 10
+n_photons_per_controlled_mode = 100
 
 # ------------------ ATMOSPHERE ----------------- #
 
@@ -369,6 +369,7 @@ pupil_shifts_alternative_quincux = [
 pupil_shifts_dict = {
     "zeros": pupil_shifts_zeros,
     "horizontal": pupil_shifts_horizontal,
+    "vertical": pupil_shifts_vertical,
     "hv": pupil_shifts_hv,
     "quincux": pupil_shifts_quincux,
 }
