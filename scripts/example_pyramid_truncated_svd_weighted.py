@@ -39,25 +39,35 @@ class CalibratedPyramid:
 # %% Fucntions definitions
 
 
-def compute_weighted_truncated_svd_reconstructor():
-    return
+def compute_weighted_truncated_svd_reconstructor(
+    interaction_matrix, c_phi, n_controlled_modes
+):
+    L = np.linalg.cholesky(c_phi)
+    A = interaction_matrix @ L
+    U, singular_values, Vh = np.linalg.svd(A, full_matrices=False)
+    U_k = U[:, :n_controlled_modes]
+    s_k = singular_values[:n_controlled_modes]
+    Vh_k = Vh[:n_controlled_modes, :]
+    reconstructor = L @ Vh_k.T / s_k @ U_k.T
+
+    return reconstructor, singular_values
 
 
 def compute_lse_reconstructor(interaction_matrix, n_controlled_modes):
-    reconstructor_lse = np.linalg.pinv(interaction_matrix[:, :n_controlled_modes])
-    reconstructor_lse = np.concatenate(
+    reconstructor = np.linalg.pinv(interaction_matrix[:, :n_controlled_modes])
+    reconstructor = np.concatenate(
         (
-            reconstructor_lse,
+            reconstructor,
             np.zeros(
                 (
                     interaction_matrix.shape[1] - n_controlled_modes,
-                    reconstructor_lse.shape[1],
+                    reconstructor.shape[1],
                 )
             ),
         ),
         axis=0,
     )
-    return reconstructor_lse
+    return reconstructor
 
 
 def compute_map_reconstructor():
@@ -382,7 +392,7 @@ for shift_name, pupil_shifts in tqdm(pupil_shifts_dict.items()):
 
 modal_projector = None
 seed = 12
-use_weighted_svd = False
+use_weighted_svd = True
 
 # set flux of the ngs
 ngs.nPhoton = (
@@ -394,6 +404,8 @@ ngs.nPhoton = (
 ngs**tel * dm * pyramid  # coupling telescope, DM and WFS is mandatory to compute the number of photons per measurement point
 
 print(
+    f"Photon noise: {detector_photon_noise}\n"
+    f"Read-out noise: {detector_read_out_noise}\n"
     f"# photons per second per m^2: {ngs.nPhoton}\n"
     f"# photons per controlled mode per frame: {pyramid.cam.frame.sum() / n_controlled_modes}\n"
     f"# photons per measurement points per frame: {pyramid.cam.frame.sum() / n_measurement_points}"
@@ -403,13 +415,9 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
     interaction_matrix = calibrated_pyramid.interaction_matrix
 
     if use_weighted_svd:
-        L = np.linalg.cholesky(c_phi)
-        A = interaction_matrix @ L
-        U, singular_values, Vh = np.linalg.svd(A, full_matrices=False)
-        U_k = U[:, :n_controlled_modes]
-        s_k = singular_values[:n_controlled_modes]
-        Vh_k = Vh[:n_controlled_modes, :]
-        reconstructor_lse = L @ Vh_k.T / s_k @ U_k.T
+        reconstructor, singular_values = compute_weighted_truncated_svd_reconstructor(
+            interaction_matrix, c_phi, n_controlled_modes
+        )
 
         plt.figure()
         plt.plot(singular_values)
@@ -423,7 +431,7 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
             x=n_controlled_modes, color="r", linestyle="--", label="modal cutoff"
         )
     else:
-        reconstructor_lse = compute_lse_reconstructor(
+        reconstructor = compute_lse_reconstructor(
             interaction_matrix, n_controlled_modes
         )
 
@@ -451,7 +459,7 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
         tel,
         modal_dm,
         calibrated_pyramid.wfs,
-        reconstructor_lse,
+        reconstructor,
         loop_gain,
         n_iter,
         delay=delay,
@@ -476,10 +484,7 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
 
     # noise propagation
     plt.figure()
-    plt.plot(
-        np.diag(reconstructor_lse @ reconstructor_lse.T)
-        / calibrated_pyramid.wfs.nSignal
-    )
+    plt.plot(np.diag(reconstructor @ reconstructor.T) / calibrated_pyramid.wfs.nSignal)
     plt.yscale("log")
     plt.title(f"modal uniform noise propagation\n{shift_name} shifts")
     plt.xlabel("# modes")
