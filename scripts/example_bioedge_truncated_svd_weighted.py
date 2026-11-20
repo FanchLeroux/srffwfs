@@ -282,7 +282,7 @@ axs[1, 1].set_title("Pupil 4")
 # %% ------------------------- MODAL BASIS -------------------------------
 
 if modal_basis == "KL":
-    m2c, c_phi = compute_KL_basis(tel, atm, dm, return_covariance=True)
+    m2c, c_phi = compute_KL_basis(tel, atm, dm, return_covariance=True, n_batch=4)
     ngs**tel  # reset
 
 elif modal_basis == "poke":

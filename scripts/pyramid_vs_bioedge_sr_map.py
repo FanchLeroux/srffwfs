@@ -378,7 +378,7 @@ pupil_shifts_alternative_quincux = [
 ]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
 
 # define a dictionary to loop over the different pupil shifts configurations
-pupil_shifts_dict = {
+pupil_shifts_dict_pyramid = {
     "zeros": pupil_shifts_zeros,
     "horizontal": pupil_shifts_horizontal,
     "vertical": pupil_shifts_vertical,
@@ -386,13 +386,100 @@ pupil_shifts_dict = {
     "quincux": pupil_shifts_quincux,
 }
 
+# %% Bioedge
+
+# super resolved bioedge. Each row of pupil is one bioedge filter
+# quadrant numbering: 4, 3, 2, 1 (top left, top right, bottom left, bottom right)
+
+pupil_shifts_zeros = [
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+]
+
+pupil_shifts_horizontal = [
+    [
+        0.25,
+        -0.25,
+        0.25,
+        -0.25,
+    ],
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+]
+
+pupil_shifts_vertical = [
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+    [
+        0.25,
+        -0.25,
+        0.25,
+        -0.25,
+    ],
+]
+
+pupil_shifts_hv = [
+    [
+        0.25,
+        0.0,
+        -0.25,
+        0.0,
+    ],
+    [
+        0.0,
+        0.25,
+        0.0,
+        -0.25,
+    ],
+]
+
+pupil_shifts_quincux = [
+    [
+        0.25,
+        -0.25,
+        0.25,
+        -0.25,
+    ],
+    [
+        0.25,
+        -0.25,
+        -0.25,
+        0.25,
+    ],
+]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
+
+pupil_shifts_dict_bioedge = {
+    "zeros": pupil_shifts_zeros,
+    "horizontal": pupil_shifts_horizontal,
+    "vertical": pupil_shifts_vertical,
+    "hv": pupil_shifts_hv,
+    "quincux": pupil_shifts_quincux,
+}
 
 # %% Precompute shifted and calibrated WFS for every configuration.
 
 calibrated_pyramids: dict[str, CalibratedWfs] = {}
 calibrated_bioedges: dict[str, CalibratedWfs] = {}
 
-for shift_name, pupil_shifts in tqdm(pupil_shifts_dict.items()):
+for shift_name, pupil_shifts in tqdm(pupil_shifts_dict_pyramid.items()):
 
     pyramid = Pyramid(
         nSubap=n_subaperture,
@@ -403,23 +490,8 @@ for shift_name, pupil_shifts in tqdm(pupil_shifts_dict.items()):
         postProcessing="fullFrame",
     )
 
-    bioedge = BioEdge(
-        nSubap=n_subaperture,
-        telescope=tel,
-        modulation=0,
-        lightRatio=light_threshold,
-        n_pix_separation=n_pix_separation,
-        postProcessing="fullFrame",
-        grey_width=modulation,
-    )
-
     pyramid.apply_shift_wfs(pupil_shifts[0], pupil_shifts[1], units="pixels")
     pyramid.modulation = modulation  # update reference intensities
-
-    bioedge.apply_shift_wfs(
-        pupil_shifts[0], pupil_shifts[1], units="pixels"
-    )  # to be redifined
-    bioedge.modulation = 0
 
     calibration_pyramid = InteractionMatrix(
         ngs,
@@ -435,6 +507,31 @@ for shift_name, pupil_shifts in tqdm(pupil_shifts_dict.items()):
     )
     interaction_matrix_pyramid = calibration_pyramid.D
 
+    calibrated_pyramids[shift_name] = CalibratedWfs(
+        name=shift_name,
+        wfs=pyramid,
+        interaction_matrix=interaction_matrix_pyramid,
+    )
+
+# %%
+
+for shift_name, pupil_shifts in tqdm(pupil_shifts_dict_bioedge.items()):
+
+    bioedge = BioEdge(
+        nSubap=n_subaperture,
+        telescope=tel,
+        modulation=0,
+        lightRatio=light_threshold,
+        n_pix_separation=n_pix_separation,
+        postProcessing="fullFrame",
+        grey_width=modulation,
+    )
+
+    bioedge.apply_shift_wfs(
+        pupil_shifts[0], pupil_shifts[1], units="pixels"
+    )  # to be redifined
+    bioedge.modulation = 0
+
     calibration_bioedge = InteractionMatrix(
         ngs,
         tel,
@@ -448,12 +545,6 @@ for shift_name, pupil_shifts in tqdm(pupil_shifts_dict.items()):
         invert=False,
     )
     interaction_matrix_bioedge = calibration_bioedge.D
-
-    calibrated_pyramids[shift_name] = CalibratedWfs(
-        name=shift_name,
-        wfs=pyramid,
-        interaction_matrix=interaction_matrix_pyramid,
-    )
 
     calibrated_bioedges[shift_name] = CalibratedWfs(
         name=shift_name,
@@ -653,6 +744,8 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
             f"long exposure psf fitting limited ideal coronagraph\n{shift_name} shifts"
         )
 
+# %% bioedge
+
 for shift_name, calibrated_bioedge in calibrated_bioedges.items():
     interaction_matrix = calibrated_bioedge.interaction_matrix
 
@@ -690,14 +783,14 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
 
     plt.figure()
     plt.imshow(reference_intensities_2d_sr_bioedge)
-    plt.title(f"Reference intensities\nsuper resolved pyramid\n{shift_name} shifts")
+    plt.title(f"Reference intensities\nsuper resolved bioedge\n{shift_name} shifts")
 
     plt.figure()
     plt.imshow(
         reference_intensities_2d_sr_bioedge - reference_intensities_2d_no_sr_bioedge
     )
     plt.title(
-        f"Reference intensities difference\nsuper resolved pyramid - pyramid\n{shift_name} shifts"
+        f"Reference intensities difference\nsuper resolved bioedge - bioedge\n{shift_name} shifts"
     )
 
     dm.coefs = 0
@@ -780,7 +873,7 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
         "MAP" if use_map else f"{n_controlled_modes} controlled modes"
     )
     plt.title(
-        f"long_exposure_psf_lse_sr\nPyramid - {n_controlled_modes_str}\n{shift_name} shifts"
+        f"long_exposure_psf_lse_sr\nbioedge - {n_controlled_modes_str}\n{shift_name} shifts"
     )
     plt.savefig(
         fig_dir / f"long_exposure_psf{shift_name}_shifts.png",
