@@ -1,6 +1,8 @@
 # %% imports
 
 from copy import deepcopy
+from dataclasses import dataclass
+from tqdm import tqdm
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -312,78 +314,42 @@ pupil_shifts_dict = {
     "alternative quincux": pupil_shifts_alternative_quincux,
 }
 
-pupil_shifts_dict = {
-    "zeros": pupil_shifts_zeros,
-    "hv": pupil_shifts_hv,
-}
 
-for key, value in pupil_shifts_dict.items():
+# %% Precompute one shifted and calibrated WFS for every configuration.
+# Loop parameters below can be changed without repeating these calibrations.
 
-    # --- reset state left by the previous closed loop ---
+
+@dataclass
+class CalibratedPyramid:
+    name: str
+    wfs: Pyramid
+    interaction_matrix: np.ndarray
+
+
+calibrated_pyramids: dict[str, CalibratedPyramid] = {}
+
+for shift_name, pupil_shifts in tqdm(pupil_shifts_dict.items()):
     dm.coefs = 0
-    pyramid_sr.cam.photonNoise = False
-    pyramid_sr.cam.readoutNoise = 0.0
-    ngs**tel  # flat wavefront, resets OPD
+    ngs**tel  # flat wavefront
 
-    pupil_shifts = (
-        value  # choose between pupil_shifts_horizontal and pupil_shifts_quincux
+    wfs = Pyramid(
+        nSubap=n_subaperture,
+        telescope=tel,
+        modulation=modulation,
+        lightRatio=light_threshold,
+        n_pix_separation=n_pix_separation,
+        postProcessing="fullFrame",
     )
-    pyramid_sr.apply_shift_wfs(
-        pupil_shifts[0], pupil_shifts[1], units="pixels"
-    )  # quadrant numbering: 3, 4, 2, 1 (top left, top right, bottom left, bottom right)
-    pyramid_sr.modulation = modulation  # update reference intensities etc.
-    reference_intensities_2d_sr = pyramid_sr.referenceSignal_2D
-    valid_signal_2d_sr = pyramid_sr.valid_signal_2D
+    ngs**tel * dm * wfs
 
-    plt.figure()
-    plt.imshow(reference_intensities_2d_sr)
-    plt.title(f"Reference intensities\nsuper resolved pyramid\n{key} shifts")
+    wfs.apply_shift_wfs(pupil_shifts[0], pupil_shifts[1], units="pixels")
+    wfs.modulation = modulation
 
-    plt.figure()
-    plt.imshow(reference_intensities_2d_sr - reference_intensities_2d_no_sr)
-    plt.title(
-        f"Reference intensities difference\nsuper resolved pyramid - pyramid\n{key} shifts"
-    )
-
-    plt.figure()
-    plt.imshow(~(valid_signal_2d_sr == valid_signal_2d_no_sr))
-    plt.title(
-        f"Valid signal difference\nsuper resolved pyramid - pyramid\n{key} shifts"
-    )
-
-    pupil_1 = deepcopy(pyramid_sr.valid_signal_2D)
-    pupil_1[pupil_1.shape[0] // 2 :, :] = 0
-    pupil_1[:, pupil_1.shape[1] // 2 :] = 0
-
-    pupil_2 = deepcopy(pyramid_sr.valid_signal_2D)
-    pupil_2[pupil_2.shape[0] // 2 :, :] = 0
-    pupil_2[:, : pupil_2.shape[1] // 2] = 0
-
-    pupil_3 = deepcopy(pyramid_sr.valid_signal_2D)
-    pupil_3[: pupil_3.shape[0] // 2, :] = 0
-    pupil_3[:, pupil_3.shape[1] // 2 :] = 0
-
-    pupil_4 = deepcopy(pyramid_sr.valid_signal_2D)
-    pupil_4[: pupil_4.shape[0] // 2, :] = 0
-    pupil_4[:, : pupil_4.shape[1] // 2] = 0
-
-    fig, axs = plt.subplots(2, 2)
-    axs[0, 0].imshow(pupil_1)
-    axs[0, 0].set_title("Pupil 1")
-    axs[0, 1].imshow(pupil_2)
-    axs[0, 1].set_title("Pupil 2")
-    axs[1, 0].imshow(pupil_3)
-    axs[1, 0].set_title("Pupil 3")
-    axs[1, 1].imshow(pupil_4)
-    axs[1, 1].set_title("Pupil 4")
-
-    # calibration
-
-    calib_sr = InteractionMatrix(
+    calibration = InteractionMatrix(
         ngs,
         tel,
         modal_dm,
-        pyramid_sr,
+        wfs,
         M2C=np.diag(np.ones(modal_dm.nValidAct)),
         stroke=stroke,
         single_pass=single_pass,
@@ -391,49 +357,50 @@ for key, value in pupil_shifts_dict.items():
         display=True,
         invert=False,
     )
-
-    interaction_matrix = calib_sr.D
+    interaction_matrix = calibration.D
 
     print(
         f"Interaction matrix shape: {interaction_matrix.shape}\n"
         f"Interaction matrix rank: {np.linalg.matrix_rank(interaction_matrix)}"
     )
 
+    calibrated_pyramids[shift_name] = CalibratedPyramid(
+        name=shift_name,
+        wfs=wfs,
+        interaction_matrix=interaction_matrix,
+    )
+
+# %% Closed-loop parameter sweep.
+# This section never recalibrates; it only reuses the shifted WFS setups above.
+
+modal_projector = None
+seed = 12
+
+for shift_name, calibrated_pyramid in calibrated_pyramids.items():
+    interaction_matrix = calibrated_pyramid.interaction_matrix
+
     if use_weighted_svd:
-        # compute reconstructor with truncated SVD weightened by the phase covariance matrix
         L = np.linalg.cholesky(c_phi)
         A = interaction_matrix @ L
-        U, s, Vh = np.linalg.svd(A, full_matrices=False)
+        U, singular_values, Vh = np.linalg.svd(A, full_matrices=False)
         U_k = U[:, :n_controlled_modes]
-        s_k = s[:n_controlled_modes]
+        s_k = singular_values[:n_controlled_modes]
         Vh_k = Vh[:n_controlled_modes, :]
         reconstructor_lse = L @ Vh_k.T / s_k @ U_k.T
-        # T = (
-        #     L @ Vh_k.T
-        # )  # (n_cal, n_controlled_modes): control modes in original-basis coefficients
-        # control_basis = calibration_basis @ T  # control modes in phase space
-        # modal_projector_ctrl = np.linalg.pinv(
-        #     control_basis
-        # )  # phase -> control-mode coefficients z
 
-        # phase -> coefficients on the ORIGINAL basis, restricted to the controlled subspace
-        # modal_projector = T @ modal_projector_ctrl  # (n_cal, n_pix)
-        # print("modal projector computed!")
         plt.figure()
-        plt.plot(s)
+        plt.plot(singular_values)
         plt.yscale("log")
-        plt.title(f"Singular values of the weighted interaction matrix\n{key} shifts")
+        plt.title(
+            f"Singular values of the weighted interaction matrix\n{shift_name} shifts"
+        )
         plt.xlabel("# modes")
         plt.ylabel("Singular value")
         plt.axvline(
             x=n_controlled_modes, color="r", linestyle="--", label="modal cutoff"
         )
-
     else:
-        # compute classic lse reconstructor
-        reconstructor_lse = np.linalg.pinv(
-            interaction_matrix[:, :n_controlled_modes]
-        )  # unweighted LSE reconstructor
+        reconstructor_lse = np.linalg.pinv(interaction_matrix[:, :n_controlled_modes])
         reconstructor_lse = np.concatenate(
             (
                 reconstructor_lse,
@@ -445,26 +412,32 @@ for key, value in pupil_shifts_dict.items():
                 ),
             ),
             axis=0,
-        )  # pad the reconstructor with zeros to match the number of WFS signals
-        # modal_projector = np.linalg.pinv(
-        #     calibration_basis
-        # )  # phase -> coefficients on the ORIGINAL basis
-        # print("modal projector computed!")
+        )
 
-    modal_projector = None
+    reference_intensities_2d_sr = calibrated_pyramid.wfs.referenceSignal_2D
+    valid_signal_2d_sr = calibrated_pyramid.wfs.valid_signal_2D
 
-    # SEED
+    plt.figure()
+    plt.imshow(reference_intensities_2d_sr)
+    plt.title(f"Reference intensities\nsuper resolved pyramid\n{shift_name} shifts")
 
-    seed = 12  # seed for atmosphere computation
+    plt.figure()
+    plt.imshow(reference_intensities_2d_sr - reference_intensities_2d_no_sr)
+    plt.title(
+        f"Reference intensities difference\nsuper resolved pyramid - pyramid\n{shift_name} shifts"
+    )
 
-    # Close the loop - LSE - SR
+    dm.coefs = 0
+    calibrated_pyramid.wfs.cam.photonNoise = False
+    calibrated_pyramid.wfs.cam.readoutNoise = 0.0
+    ngs**tel
 
     closed_loop_results = close_the_loop(
         ngs,
         atm,
         tel,
         modal_dm,
-        pyramid_sr,
+        calibrated_pyramid.wfs,
         reconstructor_lse,
         loop_gain,
         n_iter,
@@ -472,7 +445,7 @@ for key, value in pupil_shifts_dict.items():
         photon_noise=detector_photon_noise,
         read_out_noise=detector_read_out_noise,
         polc=False,
-        interaction_matrix=interaction_matrix,
+        interaction_matrix=calibrated_pyramid.interaction_matrix,
         seed=seed,
         save_telemetry=True,
         save_psf=True,
@@ -490,9 +463,12 @@ for key, value in pupil_shifts_dict.items():
 
     # noise propagation
     plt.figure()
-    plt.plot(np.diag(reconstructor_lse @ reconstructor_lse.T) / pyramid_sr.nSignal)
+    plt.plot(
+        np.diag(reconstructor_lse @ reconstructor_lse.T)
+        / calibrated_pyramid.wfs.nSignal
+    )
     plt.yscale("log")
-    plt.title(f"modal uniform noise propagation\n{key} shifts")
+    plt.title(f"modal uniform noise propagation\n{shift_name} shifts")
     plt.xlabel("# modes")
     plt.savefig(fig_dir / "noise_propagation.png", bbox_inches="tight")
 
@@ -511,7 +487,7 @@ for key, value in pupil_shifts_dict.items():
     plt.plot(fitting_error, label="fitting error")
     plt.xlabel("loop iteration")
     plt.ylabel("residual phase RMS [nm]")
-    plt.title(f"Closed Loop residuals\n{key} shifts")
+    plt.title(f"Closed Loop residuals\n{shift_name} shifts")
     plt.legend()
     plt.savefig(fig_dir / "residuals.png", bbox_inches="tight")
 
@@ -519,7 +495,7 @@ for key, value in pupil_shifts_dict.items():
     plt.figure()
     plt.plot(closed_loop_results.strehl, label="strehl")
     plt.ylabel("strehl phase RMS [nm]")
-    plt.title(f"Closed Loop strehls\n{key} shifts")
+    plt.title(f"Closed Loop strehls\n{shift_name} shifts")
     plt.legend()
     plt.savefig(fig_dir / "strehls.png", bbox_inches="tight")
 
@@ -531,9 +507,12 @@ for key, value in pupil_shifts_dict.items():
         cmap="inferno",
     )
     plt.title(
-        f"long_exposure_psf_lse_sr\nPyramid - {n_controlled_modes} controlled modes\n{key} shifts"
+        f"long_exposure_psf_lse_sr\nPyramid - {n_controlled_modes} controlled modes\n{shift_name} shifts"
     )
-    plt.savefig(fig_dir / f"long_exposure_psf{key}_shifts.png", bbox_inches="tight")
+    plt.savefig(
+        fig_dir / f"long_exposure_psf{shift_name}_shifts.png",
+        bbox_inches="tight",
+    )
 
     if modal_projector is not None:
         # ideal coronograph fitting limited
@@ -563,7 +542,9 @@ for key, value in pupil_shifts_dict.items():
         )  # normalise by diffraction-limited peak
         plt.figure()
         plt.imshow(psf_le, norm="linear", cmap="inferno")
-        plt.title(f"long exposure psf fitting limited ideal coronagraph\n{key} shifts")
+        plt.title(
+            f"long exposure psf fitting limited ideal coronagraph\n{shift_name} shifts"
+        )
 
 # %%
 
