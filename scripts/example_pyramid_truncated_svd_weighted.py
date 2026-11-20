@@ -118,7 +118,7 @@ fig_dir = config.root_dir / "outputs"
 # phot.R = [0.640e-6, 0.150e-6, 4.01e12/cst]
 wavelength = 640e-9  # [m] wavelength of the guide star
 optical_band = "R"  # optical band of the guide star
-n_photons_per_controlled_mode = 2
+n_photons_per_controlled_mode = 10
 
 # ------------------ ATMOSPHERE ----------------- #
 
@@ -152,7 +152,7 @@ light_threshold = (
     0.3 if modulation > 0.0 else 0
 )  # light threshold to select the valid pixels
 detector_photon_noise = False
-detector_read_out_noise = 10.0  # e- RMS
+detector_read_out_noise = 3.0  # e- RMS
 
 # super resolution
 sr_amplitude = 0.25  # [pixel] super resolution shifts amplitude
@@ -436,12 +436,14 @@ ngs.nPhoton = (
 
 ngs**tel * dm * pyramid  # coupling telescope, DM and WFS is mandatory to compute the number of photons per measurement point
 
+n_photons_per_frame = pyramid.cam.frame.sum()  # number of photons per frame
+
 print(
     f"Photon noise: {detector_photon_noise}\n"
     f"Read-out noise: {detector_read_out_noise}\n"
     f"# photons per second per m^2: {ngs.nPhoton}\n"
-    f"# photons per controlled mode per frame: {pyramid.cam.frame.sum() / n_controlled_modes}\n"
-    f"# photons per measurement points per frame: {pyramid.cam.frame.sum() / n_measurement_points}"
+    f"# photons per controlled mode per frame: {n_photons_per_frame / n_controlled_modes}\n"
+    f"# photons per measurement points per frame: {n_photons_per_frame / n_measurement_points}"
 )
 
 for shift_name, calibrated_pyramid in calibrated_pyramids.items():
@@ -466,7 +468,9 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
 
     if use_map:
         reconstructor = compute_map_reconstructor(
-            interaction_matrix, c_phi, detector_read_out_noise
+            interaction_matrix,
+            c_phi,
+            (detector_read_out_noise / n_photons_per_frame) ** 2,
         )
 
     else:
