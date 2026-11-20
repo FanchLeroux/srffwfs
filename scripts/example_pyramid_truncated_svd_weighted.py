@@ -425,7 +425,9 @@ for key, value in pupil_shifts_dict.items():
         plt.title(f"Singular values of the weighted interaction matrix\n{key} shifts")
         plt.xlabel("# modes")
         plt.ylabel("Singular value")
-        plt.axvline(x=n_controlled_modes, color="r", linestyle="--", label="modal cutoff")
+        plt.axvline(
+            x=n_controlled_modes, color="r", linestyle="--", label="modal cutoff"
+        )
 
     else:
         # compute classic lse reconstructor
@@ -566,5 +568,3 @@ for key, value in pupil_shifts_dict.items():
 # %%
 
 plt.show()
-
-# %%
