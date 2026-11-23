@@ -130,6 +130,7 @@ external_scale = 30  # [m] value of L0 in the visibile
 fractional_r0 = [0.45, 0.1, 0.1, 0.25, 0.1]  # Cn2 profile (percentage)
 wind_speed = [5, 4, 8, 10, 2]  # [m.s-1] wind speed of layers
 wind_direction = [0, 72, 144, 216, 288]  # [degrees] wind direction of layers
+wind_direction = [wd + 90 for wd in wind_direction]  # check influence on LO contrast
 altitude = [0, 1000, 5000, 10000, 12000]  # [m] altitude of layers
 
 # ------------------- TELESCOPE ------------------ #
@@ -390,10 +391,11 @@ pupil_shifts_dict_pyramid = {
 
 pupil_shifts_dict_pyramid = {
     "zeros": pupil_shifts_zeros,
-    "hv": pupil_shifts_hv,
+    "quincux": pupil_shifts_quincux,
 }
 
 # %% Bioedge
+
 
 # super resolved bioedge. Each row of pupil is one bioedge filter
 # quadrant numbering: 4, 3, 2, 1 (top left, top right, bottom left, bottom right)
@@ -1100,6 +1102,107 @@ for calibrated_pyramid, calibrated_bioedge in zip(
     )
     cbar.set_label(r"$\log_{10}$ (normalised intensity)", fontsize=11)
     cbar.outline.set_visible(False)
+
+
+# %% plot done by claude
+
+from matplotlib.colors import LogNorm
+from mpl_toolkits.axes_grid1 import ImageGrid
+
+# ------------------------- figure settings ------------------------- #
+
+COLUMN_WIDTH_IN = 3.5  # single column; use ~7.2 to span both columns
+FIGURE_HEIGHT_IN = 2.6
+
+PAPER_STYLE = {
+    "mathtext.fontset": "cm",
+    "font.size": 8,
+    "axes.titlesize": 8,
+    "axes.labelsize": 8,
+    "xtick.labelsize": 7,
+    "ytick.labelsize": 7,
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "savefig.dpi": 300,
+}
+
+cmap = plt.get_cmap("inferno").copy()
+cmap.set_bad("white")  # NaN pixels (zero contrast) are drawn in white
+
+# crop geometry: padding_factor pixels per lambda/D
+n_pix_crop = int(n_actuator * padding_factor * field_of_view_factor)
+half_fov = n_actuator * field_of_view_factor / 2  # [lambda/D]
+extent = (-half_fov, half_fov, -half_fov, half_fov)
+
+
+# --------------------------- helpers --------------------------- #
+
+
+def prepare_psf(long_exposure):
+    """Crop the PSF and replace non-positive values by NaN."""
+    psf = crop_array(long_exposure, n_pix_crop)
+    return np.where(psf > 0, psf, np.nan)
+
+
+def decade_limits(psfs):
+    """Colour limits shared by all panels, rounded outward to whole decades."""
+    values = np.concatenate([psf[np.isfinite(psf)] for psf in psfs])
+    vmin = 10 ** np.floor(np.log10(np.percentile(values, 1)))
+    vmax = 10 ** np.ceil(np.log10(values.max()))
+    return vmin, vmax
+
+
+# ----------------------------- plot ----------------------------- #
+
+with plt.rc_context(PAPER_STYLE):
+    for calibrated_pyramid, calibrated_bioedge in zip(
+        calibrated_pyramids.values(), calibrated_bioedges.values()
+    ):
+        panels = {
+            f"Pyramid {calibrated_pyramid.name}": prepare_psf(
+                calibrated_pyramid.long_exposure
+            ),
+            f"Bi-O edge {calibrated_bioedge.name}": prepare_psf(
+                calibrated_bioedge.long_exposure
+            ),
+        }
+        norm = LogNorm(*decade_limits(panels.values()))
+
+        fig, axes = plt.subplots(
+            1,
+            2,
+            figsize=(COLUMN_WIDTH_IN, 2.3),
+            sharex=True,
+            sharey=True,
+            layout="constrained",
+        )
+        # tight padding [in] around the figure and between panels
+        fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02, wspace=0.02, hspace=0.02)
+
+        for ax, (title, psf) in zip(axes, panels.items()):
+            im = ax.imshow(psf, cmap=cmap, norm=norm, origin="lower", extent=extent)
+            ax.set_title(title, pad=3)
+            ax.set_xlabel(r"$\lambda/D$", labelpad=1)
+            ax.locator_params(nbins=4)
+            ax.tick_params(pad=2)
+
+        axes[0].set_ylabel(r"$\lambda/D$", labelpad=1)
+        # hide the redundant y tick labels of the right panel
+        axes[1].tick_params(labelleft=False)
+
+        cbar = fig.colorbar(
+            im,
+            ax=axes,
+            location="bottom",
+            fraction=0.06,  # colorbar thickness relative to the panels
+            aspect=40,
+            pad=0.02,
+        )
+        cbar.set_label("Contrast", labelpad=1)
+
+        stem = f"long_exposure_contrast_pyr_{calibrated_pyramid.name}_bio_{calibrated_bioedge.name}"
+        fig.savefig(fig_dir / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.01)
+        fig.savefig(fig_dir / f"{stem}.png", bbox_inches="tight", pad_inches=0.01)
 
 # %%
 
