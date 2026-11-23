@@ -125,7 +125,7 @@ n_photons_per_controlled_mode = 100
 
 # ------------------ ATMOSPHERE ----------------- #
 
-r0 = 0.30  # [m] value of r0 at 500 nm
+r0 = 0.10  # [m] value of r0 at 500 nm
 external_scale = 30  # [m] value of L0 in the visibile
 fractional_r0 = [0.45, 0.1, 0.1, 0.25, 0.1]  # Cn2 profile (percentage)
 wind_speed = [5, 4, 8, 10, 2]  # [m.s-1] wind speed of layers
@@ -388,6 +388,11 @@ pupil_shifts_dict_pyramid = {
     "quincux": pupil_shifts_quincux,
 }
 
+pupil_shifts_dict_pyramid = {
+    "zeros": pupil_shifts_zeros,
+    "hv": pupil_shifts_hv,
+}
+
 # %% Bioedge
 
 # super resolved bioedge. Each row of pupil is one bioedge filter
@@ -476,6 +481,11 @@ pupil_shifts_dict_bioedge = {
     "quincux": pupil_shifts_quincux,
 }
 
+pupil_shifts_dict_bioedge = {
+    "zeros": pupil_shifts_zeros,
+    "quincux": pupil_shifts_quincux,
+}
+
 # %% Precompute shifted and calibrated WFS for every configuration.
 
 calibrated_pyramids: dict[str, CalibratedWfs] = {}
@@ -557,7 +567,7 @@ for shift_name, pupil_shifts in tqdm(pupil_shifts_dict_bioedge.items()):
 # %% Closed-loop tests
 
 modal_projector = None
-seed = 12
+seed = 0
 use_weighted_svd = True
 use_map = True
 
@@ -986,10 +996,10 @@ for calibrated_pyramid, calibrated_bioedge in zip(
     calibrated_pyramids.values(), calibrated_bioedges.values()
 ):
     psfs = {
-        "Super-resolved pyramid": np.log10(
+        f"pyramid {calibrated_pyramid.name}": np.log10(
             crop_array(calibrated_pyramid.long_exposure, n_actuator * padding_factor)
         ),
-        "Super-resolved BioEdge": np.log10(
+        f"BioEdge {calibrated_bioedge.name}": np.log10(
             crop_array(calibrated_bioedge.long_exposure, n_actuator * padding_factor)
         ),
     }
@@ -1019,11 +1029,6 @@ for calibrated_pyramid, calibrated_bioedge in zip(
     )
     cbar.set_label(r"$\log_{10}$ (normalised intensity)", fontsize=11)
     cbar.outline.set_visible(False)
-
-    fig.suptitle(
-        f"Long exposure contrast\npyramid {calibrated_pyramid.name}\nBi-O edge {calibrated_bioedge.name}",
-        fontsize=14,
-    )
 
 # %%
 
