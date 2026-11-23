@@ -931,18 +931,22 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
 # %% plot contrast
 
 
-def compute_contrast(residual_phase_screens, pupil, pad=2):
+def compute_contrast(residual_phase_screens, pupil, pad=2, remove_tip_tilt=False):
     """
     Long-exposure contrast with an ideal coronagraph.
 
     residual_phase_screens : (npx, npx, n_screens) residual phase in RADIANS
     pupil                  : (npx, npx) binary pupil mask (constant amplitude)
     pad                    : zero-padding factor (PSF sampling = pad pixels per lambda/D)
+    remove_tip_tilt        : if True, subtract the least-squares piston/tip/tilt
+                             fitted over the pupil from each screen before
+                             computing the field (perfect tip-tilt correction)
 
     Returns the long-exposure coronagraphic PSF (npx*pad, npx*pad), normalised
     by the peak of the diffraction-limited (non-coronagraphic) PSF.
     """
     pupil = np.asarray(pupil, dtype=float)
+    mask = pupil > 0
     npx, _, n_screens = residual_phase_screens.shape
     n_fft = pad * npx
     pupil_norm = np.sum(pupil**2)
@@ -950,13 +954,29 @@ def compute_contrast(residual_phase_screens, pupil, pad=2):
     # normalisation: peak of the diffraction-limited PSF
     peak = np.abs(np.fft.fft2(pupil, s=(n_fft, n_fft))).max() ** 2
 
+    # piston / tip / tilt basis restricted to the pupil pixels, and its pseudo-inverse
+    if remove_tip_tilt:
+        y, x = np.mgrid[:npx, :npx]
+        x = (x - x[mask].mean()) / npx
+        y = (y - y[mask].mean()) / npx
+        ptt_basis = np.stack(
+            [np.ones(mask.sum()), x[mask], y[mask]], axis=1
+        )  # (n_in_pupil, 3)
+        ptt_pinv = np.linalg.pinv(ptt_basis)  # (3, n_in_pupil)
+
     long_exposure = np.zeros((n_fft, n_fft))
 
     # accumulate screen by screen to avoid a (n_fft, n_fft, n_screens) complex cube
     for k in tqdm(range(n_screens), desc="Computing long-exposure contrast"):
         phase = np.where(
-            pupil > 0, residual_phase_screens[:, :, k], 0.0
+            mask, residual_phase_screens[:, :, k], 0.0
         )  # kills NaNs outside the pupil
+
+        if remove_tip_tilt:
+            phase_in_pupil = phase[mask]
+            coefs = ptt_pinv @ phase_in_pupil
+            phase[mask] = phase_in_pupil - ptt_basis @ coefs
+
         field = pupil * np.exp(1j * phase)
 
         # ideal coronagraph: remove the piston (pupil-shaped) component of the field
@@ -973,6 +993,7 @@ def compute_contrast(residual_phase_screens, pupil, pad=2):
 
 # %%
 
+remove_tip_tilt = True
 padding_factor = 4
 pupil = tel.pupil.astype(float)
 
@@ -983,11 +1004,13 @@ for calibrated_pyramid, calibrated_bioedge in zip(
         calibrated_pyramid.closed_loop_results.residual_phase_screens,
         pupil,
         pad=padding_factor,
+        remove_tip_tilt=remove_tip_tilt,
     )
     calibrated_bioedge.long_exposure = compute_contrast(
         calibrated_bioedge.closed_loop_results.residual_phase_screens,
         pupil,
         pad=padding_factor,
+        remove_tip_tilt=remove_tip_tilt,
     )
 
 # %%
@@ -999,7 +1022,7 @@ for calibrated_pyramid, calibrated_bioedge in zip(
         f"pyramid {calibrated_pyramid.name}": np.log10(
             crop_array(calibrated_pyramid.long_exposure, n_actuator * padding_factor)
         ),
-        f"BioEdge {calibrated_bioedge.name}": np.log10(
+        f"Bi-O edge {calibrated_bioedge.name}": np.log10(
             crop_array(calibrated_bioedge.long_exposure, n_actuator * padding_factor)
         ),
     }
