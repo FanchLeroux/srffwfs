@@ -35,6 +35,8 @@ class CalibratedWfs:
     name: str
     wfs: Pyramid | BioEdge
     interaction_matrix: np.ndarray
+    closed_loop_results: ClosedLoopResult | None = None
+    long_exposure: np.ndarray | None = None
 
 
 # %% Fucntions definitions
@@ -651,6 +653,8 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
         modal_projector=modal_projector,
     )
 
+    calibrated_pyramid.closed_loop_results = closed_loop_results
+
     # post processing
 
     long_exposure_psf_lse_sr = np.sum(
@@ -819,6 +823,8 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
         modal_projector=modal_projector,
     )
 
+    calibrated_bioedge.closed_loop_results = closed_loop_results
+
     # post processing
 
     long_exposure_psf_lse_sr = np.sum(
@@ -911,6 +917,113 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
         plt.title(
             f"long exposure psf fitting limited ideal coronagraph\n{shift_name} shifts"
         )
+
+# %% plot contrast
+
+
+def compute_contrast(residual_phase_screens, pupil, pad=2):
+    """
+    Long-exposure contrast with an ideal coronagraph.
+
+    residual_phase_screens : (npx, npx, n_screens) residual phase in RADIANS
+    pupil                  : (npx, npx) binary pupil mask (constant amplitude)
+    pad                    : zero-padding factor (PSF sampling = pad pixels per lambda/D)
+
+    Returns the long-exposure coronagraphic PSF (npx*pad, npx*pad), normalised
+    by the peak of the diffraction-limited (non-coronagraphic) PSF.
+    """
+    pupil = np.asarray(pupil, dtype=float)
+    npx, _, n_screens = residual_phase_screens.shape
+    n_fft = pad * npx
+    pupil_norm = np.sum(pupil**2)
+
+    # normalisation: peak of the diffraction-limited PSF
+    peak = np.abs(np.fft.fft2(pupil, s=(n_fft, n_fft))).max() ** 2
+
+    long_exposure = np.zeros((n_fft, n_fft))
+
+    # accumulate screen by screen to avoid a (n_fft, n_fft, n_screens) complex cube
+    for k in tqdm(range(n_screens), desc="Computing long-exposure contrast"):
+        phase = np.where(
+            pupil > 0, residual_phase_screens[:, :, k], 0.0
+        )  # kills NaNs outside the pupil
+        field = pupil * np.exp(1j * phase)
+
+        # ideal coronagraph: remove the piston (pupil-shaped) component of the field
+        field -= (np.sum(pupil * field) / pupil_norm) * pupil
+
+        psf = np.abs(np.fft.fftshift(np.fft.fft2(field, s=(n_fft, n_fft)))) ** 2
+        long_exposure += psf
+
+    long_exposure /= n_screens
+    long_exposure /= peak
+
+    return long_exposure
+
+
+# %%
+
+padding_factor = 4
+pupil = tel.pupil.astype(float)
+
+for calibrated_pyramid, calibrated_bioedge in zip(
+    calibrated_pyramids.values(), calibrated_bioedges.values()
+):
+    calibrated_pyramid.long_exposure = compute_contrast(
+        calibrated_pyramid.closed_loop_results.residual_phase_screens,
+        pupil,
+        pad=padding_factor,
+    )
+    calibrated_bioedge.long_exposure = compute_contrast(
+        calibrated_bioedge.closed_loop_results.residual_phase_screens,
+        pupil,
+        pad=padding_factor,
+    )
+
+# %%
+
+for calibrated_pyramid, calibrated_bioedge in zip(
+    calibrated_pyramids.values(), calibrated_bioedges.values()
+):
+    psfs = {
+        "Super-resolved pyramid": np.log10(
+            crop_array(calibrated_pyramid.long_exposure, n_actuator * padding_factor)
+        ),
+        "Super-resolved BioEdge": np.log10(
+            crop_array(calibrated_bioedge.long_exposure, n_actuator * padding_factor)
+        ),
+    }
+
+    # shared color scale so the two panels are directly comparable
+    vmax = max(np.nanmax(p) for p in psfs.values())
+    vmin = min(np.nanpercentile(p[np.isfinite(p)], 1) for p in psfs.values())
+
+    fig, axes = plt.subplots(
+        1, 2, figsize=(10, 5.5), sharex=True, sharey=True, layout="constrained"
+    )
+
+    for ax, (title, psf) in zip(axes, psfs.items()):
+        im = ax.imshow(psf, cmap="inferno", vmin=vmin, vmax=vmax, origin="lower")
+        ax.set_title(title, fontsize=12)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    cbar = fig.colorbar(
+        im,
+        ax=axes,
+        location="bottom",
+        orientation="horizontal",
+        shrink=0.6,
+        aspect=40,
+        pad=0.04,
+    )
+    cbar.set_label(r"$\log_{10}$ (normalised intensity)", fontsize=11)
+    cbar.outline.set_visible(False)
+
+    fig.suptitle(
+        f"Long exposure contrast\npyramid {calibrated_pyramid.name}\nBi-O edge {calibrated_bioedge.name}",
+        fontsize=14,
+    )
 
 # %%
 
