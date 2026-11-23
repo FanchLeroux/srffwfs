@@ -154,8 +154,8 @@ n_pix_separation = 2  # [pixel] separation ratio between the pupils
 light_threshold = (
     0.3 if modulation > 0.0 else 0
 )  # light threshold to select the valid pixels
-detector_photon_noise = False
-detector_read_out_noise = 3.0  # e- RMS
+detector_photon_noise = True
+detector_read_out_noise = 0.0  # e- RMS
 
 # super resolution
 sr_amplitude = 0.25  # [pixel] super resolution shifts amplitude
@@ -179,7 +179,7 @@ single_pass = False  # push-pull or push only for the calibration
 # -------------------- LOOP ----------------------- #
 
 loop_gain = 0.7
-n_iter = 200
+n_iter = 1000
 delay = 1
 loop_frequency = 1000  # [Hz] loop frequency
 n_controlled_modes = int(
@@ -611,10 +611,13 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
         )
 
     if use_map:
+        c_b = (detector_read_out_noise / n_photons_per_frame) ** 2
+        if detector_photon_noise:
+            c_b += calibrated_pyramid.wfs.referenceSignal / n_photons_per_frame
         reconstructor = compute_map_reconstructor(
             interaction_matrix,
             c_phi,
-            (detector_read_out_noise / n_photons_per_frame) ** 2,
+            c_b,
         )
 
     else:
@@ -781,10 +784,13 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
         )
 
     if use_map:
+        c_b = (detector_read_out_noise / n_photons_per_frame) ** 2
+        if detector_photon_noise:
+            c_b += calibrated_bioedge.wfs.referenceSignal / n_photons_per_frame
         reconstructor = compute_map_reconstructor(
             interaction_matrix,
             c_phi,
-            (detector_read_out_noise / n_photons_per_frame) ** 2,
+            c_b,
         )
 
     else:
@@ -933,17 +939,48 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
 
 def compute_contrast(residual_phase_screens, pupil, pad=2, remove_tip_tilt=False):
     """
-    Long-exposure contrast with an ideal coronagraph.
+    Compute the long-exposure contrast (2D map) with an ideal coronagraph.
 
-    residual_phase_screens : (npx, npx, n_screens) residual phase in RADIANS
-    pupil                  : (npx, npx) binary pupil mask (constant amplitude)
-    pad                    : zero-padding factor (PSF sampling = pad pixels per lambda/D)
-    remove_tip_tilt        : if True, subtract the least-squares piston/tip/tilt
-                             fitted over the pupil from each screen before
-                             computing the field (perfect tip-tilt correction)
+    The residual phase screens are converted to a complex field with constant
+    amplitude over the pupil. The piston field mode (the component of the field
+    proportional to the pupil) is removed to emulate an ideal coronagraph, and
+    the resulting PSFs are averaged over all screens.
 
-    Returns the long-exposure coronagraphic PSF (npx*pad, npx*pad), normalised
-    by the peak of the diffraction-limited (non-coronagraphic) PSF.
+    Parameters
+    ----------
+    residual_phase_screens : numpy.ndarray
+        Residual phase screens in radians, with shape ``(npx, npx, n_screens)``.
+    pupil : numpy.ndarray
+        Binary pupil mask of shape ``(npx, npx)``. The amplitude is assumed
+        constant over the pupil.
+    pad : int, optional
+        Zero-padding factor. It sets the PSF sampling, in pixels per
+        :math:`\\lambda/D`. Default is 2.
+    remove_tip_tilt : bool, optional
+        If True, subtract the least-squares piston/tip/tilt fitted over the
+        pupil from each screen before computing the field (perfect tip-tilt
+        correction applied independently to each screen). Default is False.
+
+    Returns
+    -------
+    long_exposure : numpy.ndarray
+        Long-exposure coronagraphic PSF of shape ``(npx * pad, npx * pad)``,
+        normalised by the peak of the diffraction-limited (non-coronagraphic)
+        PSF.
+
+    Examples
+    --------
+    >>> contrast = compute_contrast(screens, tel.pupil, pad=2, remove_tip_tilt=True)
+    >>> contrast.shape
+    (512, 512)
+
+    Author
+    ------
+    François Leroux (ONERA), Claude Sonnet 5.5 (Anthropic)
+
+    Date
+    ----
+    2026-11-23
     """
     pupil = np.asarray(pupil, dtype=float)
     mask = pupil > 0
@@ -968,9 +1005,7 @@ def compute_contrast(residual_phase_screens, pupil, pad=2, remove_tip_tilt=False
 
     # accumulate screen by screen to avoid a (n_fft, n_fft, n_screens) complex cube
     for k in tqdm(range(n_screens), desc="Computing long-exposure contrast"):
-        phase = np.where(
-            mask, residual_phase_screens[:, :, k], 0.0
-        )  # kills NaNs outside the pupil
+        phase = np.where(mask, residual_phase_screens[:, :, k], 0.0)
 
         if remove_tip_tilt:
             phase_in_pupil = phase[mask]
@@ -993,7 +1028,8 @@ def compute_contrast(residual_phase_screens, pupil, pad=2, remove_tip_tilt=False
 
 # %%
 
-remove_tip_tilt = True
+n_bootstrap_frames = 25
+remove_tip_tilt = False
 padding_factor = 4
 pupil = tel.pupil.astype(float)
 
@@ -1001,13 +1037,17 @@ for calibrated_pyramid, calibrated_bioedge in zip(
     calibrated_pyramids.values(), calibrated_bioedges.values()
 ):
     calibrated_pyramid.long_exposure = compute_contrast(
-        calibrated_pyramid.closed_loop_results.residual_phase_screens,
+        calibrated_pyramid.closed_loop_results.residual_phase_screens[
+            :, :, n_bootstrap_frames:
+        ],
         pupil,
         pad=padding_factor,
         remove_tip_tilt=remove_tip_tilt,
     )
     calibrated_bioedge.long_exposure = compute_contrast(
-        calibrated_bioedge.closed_loop_results.residual_phase_screens,
+        calibrated_bioedge.closed_loop_results.residual_phase_screens[
+            :, :, n_bootstrap_frames:
+        ],
         pupil,
         pad=padding_factor,
         remove_tip_tilt=remove_tip_tilt,
@@ -1015,15 +1055,23 @@ for calibrated_pyramid, calibrated_bioedge in zip(
 
 # %%
 
+field_of_view_factor = 1.2  # crop the field of view for display purposes. Percentage of the correction zone
+
 for calibrated_pyramid, calibrated_bioedge in zip(
     calibrated_pyramids.values(), calibrated_bioedges.values()
 ):
     psfs = {
         f"pyramid {calibrated_pyramid.name}": np.log10(
-            crop_array(calibrated_pyramid.long_exposure, n_actuator * padding_factor)
+            crop_array(
+                calibrated_pyramid.long_exposure,
+                int(n_actuator * padding_factor * field_of_view_factor),
+            )
         ),
         f"Bi-O edge {calibrated_bioedge.name}": np.log10(
-            crop_array(calibrated_bioedge.long_exposure, n_actuator * padding_factor)
+            crop_array(
+                calibrated_bioedge.long_exposure,
+                int(n_actuator * padding_factor * field_of_view_factor),
+            )
         ),
     }
 
