@@ -58,7 +58,7 @@ fig_dir = config.root_dir / "outputs"
 # phot.R = [0.640e-6, 0.150e-6, 4.01e12/cst]
 wavelength = 640e-9  # [m] wavelength of the guide star
 optical_band = "R"  # optical band of the guide star
-n_photons_per_frame = 10000
+n_photons_per_frame = 10000.0  # number of photons per frame
 
 # ------------------ ATMOSPHERE ----------------- #
 
@@ -918,106 +918,6 @@ for calibrated_pyramid, calibrated_bioedge in zip(
 # %% plot done by claude
 
 from matplotlib.colors import LogNorm
-from mpl_toolkits.axes_grid1 import ImageGrid
-
-# ------------------------- figure settings ------------------------- #
-
-COLUMN_WIDTH_IN = 3.5  # single column; use ~7.2 to span both columns
-FIGURE_HEIGHT_IN = 2 * 2.6
-
-PAPER_STYLE = {
-    "mathtext.fontset": "cm",
-    "font.size": 8,
-    "axes.titlesize": 8,
-    "axes.labelsize": 8,
-    "xtick.labelsize": 7,
-    "ytick.labelsize": 7,
-    "xtick.direction": "in",
-    "ytick.direction": "in",
-    "savefig.dpi": 300,
-}
-
-cmap = plt.get_cmap("inferno").copy()
-cmap.set_bad("white")  # NaN pixels (zero contrast) are drawn in white
-
-# crop geometry: padding_factor pixels per lambda/D
-n_pix_crop = int(n_actuator * padding_factor * field_of_view_factor)
-half_fov = n_actuator * field_of_view_factor / 2  # [lambda/D]
-extent = (-half_fov, half_fov, -half_fov, half_fov)
-
-
-# --------------------------- helpers --------------------------- #
-
-
-def prepare_psf(long_exposure_coronograph):
-    """Crop the PSF and replace non-positive values by NaN."""
-    psf = crop_array(long_exposure_coronograph, n_pix_crop)
-    return np.where(psf > 0, psf, np.nan)
-
-
-def decade_limits(psfs):
-    """Colour limits shared by all panels, rounded outward to whole decades."""
-    values = np.concatenate([psf[np.isfinite(psf)] for psf in psfs])
-    vmin = 10 ** np.floor(np.log10(np.percentile(values, 1)))
-    vmax = 10 ** np.ceil(np.log10(values.max()))
-    return vmin, vmax
-
-
-# ----------------------------- plot ----------------------------- #
-
-with plt.rc_context(PAPER_STYLE):
-    for calibrated_pyramid, calibrated_bioedge in zip(
-        calibrated_pyramids.values(), calibrated_bioedges.values()
-    ):
-        panels = {
-            f"Pyramid {calibrated_pyramid.name}": prepare_psf(
-                calibrated_pyramid.long_exposure_coronograph
-            ),
-            f"Bi-O edge {calibrated_bioedge.name}": prepare_psf(
-                calibrated_bioedge.long_exposure_coronograph
-            ),
-        }
-        norm = LogNorm(*decade_limits(panels.values()))
-
-        fig, axes = plt.subplots(
-            1,
-            2,
-            figsize=(COLUMN_WIDTH_IN, 2.3),
-            sharex=True,
-            sharey=True,
-            layout="constrained",
-        )
-        # tight padding [in] around the figure and between panels
-        fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02, wspace=0.02, hspace=0.02)
-
-        for ax, (title, psf) in zip(axes, panels.items()):
-            im = ax.imshow(psf, cmap=cmap, norm=norm, origin="lower", extent=extent)
-            ax.set_title(title, pad=3)
-            ax.set_xlabel(r"$\lambda/D$", labelpad=1)
-            ax.locator_params(nbins=4)
-            ax.tick_params(pad=2)
-
-        axes[0].set_ylabel(r"$\lambda/D$", labelpad=1)
-        # hide the redundant y tick labels of the right panel
-        axes[1].tick_params(labelleft=False)
-
-        cbar = fig.colorbar(
-            im,
-            ax=axes,
-            location="bottom",
-            fraction=0.06,  # colorbar thickness relative to the panels
-            aspect=40,
-            pad=0.02,
-        )
-        cbar.set_label("Contrast", labelpad=1)
-
-        stem = f"long_exposure_coronograph_contrast_pyr_{calibrated_pyramid.name}_bio_{calibrated_bioedge.name}"
-        fig.savefig(fig_dir / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.01)
-        fig.savefig(fig_dir / f"{stem}.png", bbox_inches="tight", pad_inches=0.01)
-
-# %% plot done by claude
-
-from matplotlib.colors import LogNorm
 
 # ------------------------- figure settings ------------------------- #
 
@@ -1109,8 +1009,9 @@ with plt.rc_context(PAPER_STYLE):
                     image, cmap=cmap, norm=norm, origin="lower", extent=extent
                 )
                 ax.locator_params(nbins=4)
-                ax.tick_params(pad=2)
-
+                ax.tick_params(
+                    pad=2, color="white", labelcolor="black"
+                )  # white marks, black numbers
                 if i == 0:
                     ax.set_title(titles[j], pad=3)
                 if i == 1:
