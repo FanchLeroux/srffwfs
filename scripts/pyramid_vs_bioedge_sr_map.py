@@ -390,8 +390,7 @@ pupil_shifts_dict_pyramid = {
 }
 
 pupil_shifts_dict_pyramid = {
-    "zeros": pupil_shifts_zeros,
-    "hv": pupil_shifts_hv,
+    "horizontal": pupil_shifts_horizontal,
 }
 
 # %% Bioedge
@@ -484,8 +483,7 @@ pupil_shifts_dict_bioedge = {
 }
 
 pupil_shifts_dict_bioedge = {
-    "zeros": pupil_shifts_zeros,
-    "hv": pupil_shifts_hv,
+    "horizontal": pupil_shifts_horizontal,
 }
 
 # %% Precompute shifted and calibrated WFS for every configuration.
