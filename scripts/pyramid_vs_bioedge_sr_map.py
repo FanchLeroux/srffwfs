@@ -875,7 +875,7 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
             f"long exposure psf fitting limited ideal coronagraph\n{shift_name} shifts"
         )
 
-# %% compute contrast
+# %% compute long exposure before and after the coronograph
 
 n_bootstrap_frames = 25
 remove_tip_tilt = False
@@ -884,18 +884,20 @@ pupil = tel.pupil.astype(float)
 for calibrated_pyramid, calibrated_bioedge in zip(
     calibrated_pyramids.values(), calibrated_bioedges.values()
 ):
-    calibrated_pyramid.long_exposure = np.mean(
+    calibrated_pyramid.long_exposure = np.sum(
         calibrated_pyramid.closed_loop_results.short_exposure_psf[
             :, :, n_bootstrap_frames:
         ],
         axis=2,
     )
-    calibrated_bioedge.long_exposure = np.mean(
+    calibrated_pyramid.long_exposure /= calibrated_pyramid.long_exposure.max()
+    calibrated_bioedge.long_exposure = np.sum(
         calibrated_bioedge.closed_loop_results.short_exposure_psf[
             :, :, n_bootstrap_frames:
         ],
         axis=2,
     )
+    calibrated_bioedge.long_exposure /= calibrated_bioedge.long_exposure.max()
     calibrated_pyramid.long_exposure_coronograph = compute_contrast(
         calibrated_pyramid.closed_loop_results.residual_phase_screens[
             :, :, n_bootstrap_frames:
@@ -1010,6 +1012,125 @@ with plt.rc_context(PAPER_STYLE):
         cbar.set_label("Contrast", labelpad=1)
 
         stem = f"long_exposure_coronograph_contrast_pyr_{calibrated_pyramid.name}_bio_{calibrated_bioedge.name}"
+        fig.savefig(fig_dir / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.01)
+        fig.savefig(fig_dir / f"{stem}.png", bbox_inches="tight", pad_inches=0.01)
+
+# %% plot done by claude
+
+from matplotlib.colors import LogNorm
+
+# ------------------------- figure settings ------------------------- #
+
+COLUMN_WIDTH_IN = 3.5  # single column; use ~7.2 to span both columns
+FIGURE_HEIGHT_IN = 3.0
+
+PAPER_STYLE = {
+    "mathtext.fontset": "cm",
+    "font.size": 8,
+    "axes.titlesize": 8,
+    "axes.labelsize": 8,
+    "xtick.labelsize": 7,
+    "ytick.labelsize": 7,
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "savefig.dpi": 300,
+}
+
+cmap = plt.get_cmap("inferno").copy()
+cmap.set_bad("white")  # NaN pixels (non-positive values) are drawn in white
+
+# crop geometry: padding_factor pixels per lambda/D
+n_pix_crop = int(n_actuator * padding_factor * field_of_view_factor)
+half_fov = n_actuator * field_of_view_factor / 2  # [lambda/D]
+extent = (-half_fov, half_fov, -half_fov, half_fov)
+
+ROW_LABELS = ("Before coronagraph", "After coronagraph")
+ROW_CBAR_LABELS = ("Normalized intensity", "Contrast")
+
+
+# --------------------------- helpers --------------------------- #
+
+
+def prepare_image(image):
+    """Crop the image and replace non-positive values by NaN."""
+    cropped = crop_array(image, n_pix_crop)
+    return np.where(cropped > 0, cropped, np.nan)
+
+
+def decade_limits(images):
+    """Colour limits shared by the panels of a row, rounded outward to whole decades."""
+    values = np.concatenate([img[np.isfinite(img)] for img in images])
+    vmin = 10 ** np.floor(np.log10(np.percentile(values, 1)))
+    vmax = 10 ** np.ceil(np.log10(values.max()))
+    return vmin, vmax
+
+
+# ----------------------------- plot ----------------------------- #
+
+with plt.rc_context(PAPER_STYLE):
+    for calibrated_pyramid, calibrated_bioedge in zip(
+        calibrated_pyramids.values(), calibrated_bioedges.values()
+    ):
+        titles = (
+            f"Pyramid {calibrated_pyramid.name}",
+            f"Bi-O edge {calibrated_bioedge.name}",
+        )
+        # rows: before / after coronagraph; columns: pyramid / bi-o edge
+        rows = (
+            (
+                prepare_image(calibrated_pyramid.long_exposure),
+                prepare_image(calibrated_bioedge.long_exposure),
+            ),
+            (
+                prepare_image(calibrated_pyramid.long_exposure_coronograph),
+                prepare_image(calibrated_bioedge.long_exposure_coronograph),
+            ),
+        )
+
+        fig, axes = plt.subplots(
+            2,
+            2,
+            figsize=(COLUMN_WIDTH_IN, FIGURE_HEIGHT_IN),
+            sharex=True,
+            sharey=True,
+            layout="constrained",
+        )
+        # tight padding [in] around the figure and between panels
+        fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02, wspace=0.02, hspace=0.02)
+
+        for i, (row_images, row_label, cbar_label) in enumerate(
+            zip(rows, ROW_LABELS, ROW_CBAR_LABELS)
+        ):
+            norm = LogNorm(*decade_limits(row_images))  # one scale per row
+
+            for j, image in enumerate(row_images):
+                ax = axes[i, j]
+                im = ax.imshow(
+                    image, cmap=cmap, norm=norm, origin="lower", extent=extent
+                )
+                ax.locator_params(nbins=4)
+                ax.tick_params(pad=2)
+
+                if i == 0:
+                    ax.set_title(titles[j], pad=3)
+                if i == 1:
+                    ax.set_xlabel(r"$\lambda/D$", labelpad=1)
+                if j == 0:
+                    ax.set_ylabel(f"{row_label}\n" + r"$\lambda/D$", labelpad=1)
+                else:
+                    ax.tick_params(labelleft=False)
+
+            cbar = fig.colorbar(
+                im,
+                ax=axes[i, :],
+                location="right",
+                fraction=0.05,  # colorbar thickness relative to the panels
+                aspect=25,
+                pad=0.02,
+            )
+            cbar.set_label(cbar_label, labelpad=1)
+
+        stem = f"long_exposure_before_after_coronograph_pyr_{calibrated_pyramid.name}_bio_{calibrated_bioedge.name}"
         fig.savefig(fig_dir / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.01)
         fig.savefig(fig_dir / f"{stem}.png", bbox_inches="tight", pad_inches=0.01)
 
