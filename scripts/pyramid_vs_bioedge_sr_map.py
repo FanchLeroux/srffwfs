@@ -1,3 +1,8 @@
+"""
+Run in tmux session with
+tmux new-session -d -s mysession "uv run python path/to/script.py"
+"""
+
 # %% imports
 
 from copy import deepcopy
@@ -58,7 +63,7 @@ fig_dir = config.root_dir / "outputs"
 # phot.R = [0.640e-6, 0.150e-6, 4.01e12/cst]
 wavelength = 640e-9  # [m] wavelength of the guide star
 optical_band = "R"  # optical band of the guide star
-n_photons_per_frame = 10000.0  # number of photons per frame
+n_photons_per_frame = 100_000.0  # number of photons per frame
 
 # ------------------ ATMOSPHERE ----------------- #
 
@@ -613,7 +618,6 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
     plt.yscale("log")
     plt.title(f"modal uniform noise propagation\n{shift_name} shifts")
     plt.xlabel("# modes")
-    plt.savefig(fig_dir / "noise_propagation.png", bbox_inches="tight")
 
     fitting_error = (
         np.std(
@@ -632,7 +636,6 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
     plt.ylabel("residual phase RMS [nm]")
     plt.title(f"Closed Loop residuals\n{shift_name} shifts")
     plt.legend()
-    plt.savefig(fig_dir / "residuals.png", bbox_inches="tight")
 
     # strehls
     plt.figure()
@@ -640,7 +643,6 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
     plt.ylabel("strehl phase RMS [nm]")
     plt.title(f"Closed Loop strehls\n{shift_name} shifts")
     plt.legend()
-    plt.savefig(fig_dir / "strehls.png", bbox_inches="tight")
 
     # long exposure PSF
     plt.figure()
@@ -654,10 +656,6 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
     )
     plt.title(
         f"long_exposure_coronograph_psf_lse_sr\nPyramid - {n_controlled_modes_str}\n{shift_name} shifts"
-    )
-    plt.savefig(
-        fig_dir / f"long_exposure_coronograph_psf{shift_name}_shifts.png",
-        bbox_inches="tight",
     )
 
     if modal_projector is not None:
@@ -796,7 +794,6 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
     plt.yscale("log")
     plt.title(f"modal uniform noise propagation\n{shift_name} shifts")
     plt.xlabel("# modes")
-    plt.savefig(fig_dir / "noise_propagation.png", bbox_inches="tight")
 
     fitting_error = (
         np.std(
@@ -815,7 +812,6 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
     plt.ylabel("residual phase RMS [nm]")
     plt.title(f"Closed Loop residuals\n{shift_name} shifts")
     plt.legend()
-    plt.savefig(fig_dir / "residuals.png", bbox_inches="tight")
 
     # strehls
     plt.figure()
@@ -823,7 +819,6 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
     plt.ylabel("strehl phase RMS [nm]")
     plt.title(f"Closed Loop strehls\n{shift_name} shifts")
     plt.legend()
-    plt.savefig(fig_dir / "strehls.png", bbox_inches="tight")
 
     # long exposure PSF
     plt.figure()
@@ -837,10 +832,6 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
     )
     plt.title(
         f"long_exposure_coronograph_psf_lse_sr\nbioedge - {n_controlled_modes_str}\n{shift_name} shifts"
-    )
-    plt.savefig(
-        fig_dir / f"long_exposure_coronograph_psf{shift_name}_shifts.png",
-        bbox_inches="tight",
     )
 
     if modal_projector is not None:
@@ -922,7 +913,7 @@ from matplotlib.colors import LogNorm
 # ------------------------- figure settings ------------------------- #
 
 COLUMN_WIDTH_IN = 3.5  # single column; use ~7.2 to span both columns
-FIGURE_HEIGHT_IN = 3.0
+FIGURE_HEIGHT_IN = 2.8
 
 PAPER_STYLE = {
     "mathtext.fontset": "cm",
@@ -1031,7 +1022,7 @@ with plt.rc_context(PAPER_STYLE):
             )
             cbar.set_label(cbar_label, labelpad=1)
 
-        stem = f"long_exposure_before_after_coronograph_pyr_{calibrated_pyramid.name}_bio_{calibrated_bioedge.name}"
+        stem = f"long_exposure_before_after_coronograph_pyr_{calibrated_pyramid.name}_bio_{calibrated_bioedge.name}_{n_photons_per_frame:.0f}_photons_per_frame"
         fig.savefig(fig_dir / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.01)
         fig.savefig(fig_dir / f"{stem}.png", bbox_inches="tight", pad_inches=0.01)
 
