@@ -43,6 +43,7 @@ class CalibratedWfs:
     interaction_matrix: np.ndarray
     closed_loop_results: ClosedLoopResult | None = None
     long_exposure: np.ndarray | None = None
+    long_exposure_coronograph: np.ndarray | None = None
 
 
 # %% outputs directory
@@ -57,7 +58,7 @@ fig_dir = config.root_dir / "outputs"
 # phot.R = [0.640e-6, 0.150e-6, 4.01e12/cst]
 wavelength = 640e-9  # [m] wavelength of the guide star
 optical_band = "R"  # optical band of the guide star
-n_photons_per_frame = 100 * 400
+n_photons_per_frame = 10000
 
 # ------------------ ATMOSPHERE ----------------- #
 
@@ -96,15 +97,6 @@ detector_read_out_noise = 0.0  # e- RMS
 
 # super resolution
 sr_amplitude = 0.25  # [pixel] super resolution shifts amplitude
-
-# ----------------------- SCIENCE CAMERA ---------------------- #
-
-science_camera_psf_sampling = (
-    4  # [pixel per lambda/D] sampling of the PSF in the science camera
-)
-science_camera_resolution = (
-    3 * science_camera_psf_sampling * n_actuator
-)  # [pixel] resolution of the science camera
 
 # -------------------- CALIBRATION - MODAL BASIS ---------------- #
 
@@ -312,6 +304,18 @@ pupil_shifts_dict_bioedge = {
     "quincux": pupil_shifts_quincux_bioedge,
 }
 
+# --------------- PSF computation parameters --------------- #
+
+padding_factor = 4  # pixel per lambda/D
+field_of_view_factor = 1.2  # crop the field of view for display purposes. Percentage of the correction zone
+
+# ----------------------- SCIENCE CAMERA ---------------------- #
+
+science_camera_resolution = int(
+    field_of_view_factor * padding_factor * n_actuator
+)  # [pixel] resolution of the science camera
+science_camera_resolution += science_camera_resolution % 2  # make it even
+
 # %% Build objects
 
 # % -----------------------    TELESCOPE   -----------------------------
@@ -379,7 +383,7 @@ modal_dm = DeformableMirror(tel, nSubap=n_actuator, modes=calibration_basis)
 
 science_camera = Detector(
     nRes=science_camera_resolution,
-    psf_sampling=science_camera_psf_sampling,
+    psf_sampling=padding_factor,
     integrationTime=1 / loop_frequency,
     readoutNoise=0.0,  # [e-] RMS
     photonNoise=False,  # no photon noise in the science camera
@@ -597,7 +601,7 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
 
     # post processing
 
-    long_exposure_psf_lse_sr = np.sum(
+    long_exposure_coronograph_psf_lse_sr = np.sum(
         closed_loop_results.short_exposure_psf[:, :, 100:], axis=2
     )
 
@@ -641,7 +645,7 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
     # long exposure PSF
     plt.figure()
     plt.imshow(
-        np.log(long_exposure_psf_lse_sr),
+        np.log(long_exposure_coronograph_psf_lse_sr),
         norm="linear",
         cmap="inferno",
     )
@@ -649,10 +653,10 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
         "MAP" if use_map else f"{n_controlled_modes} controlled modes"
     )
     plt.title(
-        f"long_exposure_psf_lse_sr\nPyramid - {n_controlled_modes_str}\n{shift_name} shifts"
+        f"long_exposure_coronograph_psf_lse_sr\nPyramid - {n_controlled_modes_str}\n{shift_name} shifts"
     )
     plt.savefig(
-        fig_dir / f"long_exposure_psf{shift_name}_shifts.png",
+        fig_dir / f"long_exposure_coronograph_psf{shift_name}_shifts.png",
         bbox_inches="tight",
     )
 
@@ -780,7 +784,7 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
 
     # post processing
 
-    long_exposure_psf_lse_sr = np.sum(
+    long_exposure_coronograph_psf_lse_sr = np.sum(
         closed_loop_results.short_exposure_psf[:, :, 100:], axis=2
     )
 
@@ -824,7 +828,7 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
     # long exposure PSF
     plt.figure()
     plt.imshow(
-        np.log(long_exposure_psf_lse_sr),
+        np.log(long_exposure_coronograph_psf_lse_sr),
         norm="linear",
         cmap="inferno",
     )
@@ -832,10 +836,10 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
         "MAP" if use_map else f"{n_controlled_modes} controlled modes"
     )
     plt.title(
-        f"long_exposure_psf_lse_sr\nbioedge - {n_controlled_modes_str}\n{shift_name} shifts"
+        f"long_exposure_coronograph_psf_lse_sr\nbioedge - {n_controlled_modes_str}\n{shift_name} shifts"
     )
     plt.savefig(
-        fig_dir / f"long_exposure_psf{shift_name}_shifts.png",
+        fig_dir / f"long_exposure_coronograph_psf{shift_name}_shifts.png",
         bbox_inches="tight",
     )
 
@@ -871,17 +875,28 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
             f"long exposure psf fitting limited ideal coronagraph\n{shift_name} shifts"
         )
 
-# %% plot contrast
+# %% compute contrast
 
 n_bootstrap_frames = 25
 remove_tip_tilt = False
-padding_factor = 4
 pupil = tel.pupil.astype(float)
 
 for calibrated_pyramid, calibrated_bioedge in zip(
     calibrated_pyramids.values(), calibrated_bioedges.values()
 ):
-    calibrated_pyramid.long_exposure = compute_contrast(
+    calibrated_pyramid.long_exposure = np.mean(
+        calibrated_pyramid.closed_loop_results.short_exposure_psf[
+            :, :, n_bootstrap_frames:
+        ],
+        axis=2,
+    )
+    calibrated_bioedge.long_exposure = np.mean(
+        calibrated_bioedge.closed_loop_results.short_exposure_psf[
+            :, :, n_bootstrap_frames:
+        ],
+        axis=2,
+    )
+    calibrated_pyramid.long_exposure_coronograph = compute_contrast(
         calibrated_pyramid.closed_loop_results.residual_phase_screens[
             :, :, n_bootstrap_frames:
         ],
@@ -889,7 +904,7 @@ for calibrated_pyramid, calibrated_bioedge in zip(
         pad=padding_factor,
         remove_tip_tilt=remove_tip_tilt,
     )
-    calibrated_bioedge.long_exposure = compute_contrast(
+    calibrated_bioedge.long_exposure_coronograph = compute_contrast(
         calibrated_bioedge.closed_loop_results.residual_phase_screens[
             :, :, n_bootstrap_frames:
         ],
@@ -897,55 +912,6 @@ for calibrated_pyramid, calibrated_bioedge in zip(
         pad=padding_factor,
         remove_tip_tilt=remove_tip_tilt,
     )
-
-# %%
-
-field_of_view_factor = 1.2  # crop the field of view for display purposes. Percentage of the correction zone
-
-for calibrated_pyramid, calibrated_bioedge in zip(
-    calibrated_pyramids.values(), calibrated_bioedges.values()
-):
-    psfs = {
-        f"pyramid {calibrated_pyramid.name}": np.log10(
-            crop_array(
-                calibrated_pyramid.long_exposure,
-                int(n_actuator * padding_factor * field_of_view_factor),
-            )
-        ),
-        f"Bi-O edge {calibrated_bioedge.name}": np.log10(
-            crop_array(
-                calibrated_bioedge.long_exposure,
-                int(n_actuator * padding_factor * field_of_view_factor),
-            )
-        ),
-    }
-
-    # shared color scale so the two panels are directly comparable
-    vmax = max(np.nanmax(p) for p in psfs.values())
-    vmin = min(np.nanpercentile(p[np.isfinite(p)], 1) for p in psfs.values())
-
-    fig, axes = plt.subplots(
-        1, 2, figsize=(10, 5.5), sharex=True, sharey=True, layout="constrained"
-    )
-
-    for ax, (title, psf) in zip(axes, psfs.items()):
-        im = ax.imshow(psf, cmap="inferno", vmin=vmin, vmax=vmax, origin="lower")
-        ax.set_title(title, fontsize=12)
-        ax.set_xticks([])
-        ax.set_yticks([])
-
-    cbar = fig.colorbar(
-        im,
-        ax=axes,
-        location="bottom",
-        orientation="horizontal",
-        shrink=0.6,
-        aspect=40,
-        pad=0.04,
-    )
-    cbar.set_label(r"$\log_{10}$ (normalised intensity)", fontsize=11)
-    cbar.outline.set_visible(False)
-
 
 # %% plot done by claude
 
@@ -955,7 +921,7 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 # ------------------------- figure settings ------------------------- #
 
 COLUMN_WIDTH_IN = 3.5  # single column; use ~7.2 to span both columns
-FIGURE_HEIGHT_IN = 2.6
+FIGURE_HEIGHT_IN = 2 * 2.6
 
 PAPER_STYLE = {
     "mathtext.fontset": "cm",
@@ -981,9 +947,9 @@ extent = (-half_fov, half_fov, -half_fov, half_fov)
 # --------------------------- helpers --------------------------- #
 
 
-def prepare_psf(long_exposure):
+def prepare_psf(long_exposure_coronograph):
     """Crop the PSF and replace non-positive values by NaN."""
-    psf = crop_array(long_exposure, n_pix_crop)
+    psf = crop_array(long_exposure_coronograph, n_pix_crop)
     return np.where(psf > 0, psf, np.nan)
 
 
@@ -1003,10 +969,10 @@ with plt.rc_context(PAPER_STYLE):
     ):
         panels = {
             f"Pyramid {calibrated_pyramid.name}": prepare_psf(
-                calibrated_pyramid.long_exposure
+                calibrated_pyramid.long_exposure_coronograph
             ),
             f"Bi-O edge {calibrated_bioedge.name}": prepare_psf(
-                calibrated_bioedge.long_exposure
+                calibrated_bioedge.long_exposure_coronograph
             ),
         }
         norm = LogNorm(*decade_limits(panels.values()))
@@ -1043,7 +1009,7 @@ with plt.rc_context(PAPER_STYLE):
         )
         cbar.set_label("Contrast", labelpad=1)
 
-        stem = f"long_exposure_contrast_pyr_{calibrated_pyramid.name}_bio_{calibrated_bioedge.name}"
+        stem = f"long_exposure_coronograph_contrast_pyr_{calibrated_pyramid.name}_bio_{calibrated_bioedge.name}"
         fig.savefig(fig_dir / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.01)
         fig.savefig(fig_dir / f"{stem}.png", bbox_inches="tight", pad_inches=0.01)
 
