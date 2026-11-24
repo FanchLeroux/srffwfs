@@ -30,6 +30,7 @@ from srffwfs.reconstructor import (
     compute_map_reconstructor,
 )
 from srffwfs.closed_loop import close_the_loop, ClosedLoopResult
+from srffwfs.performance_metric import compute_contrast
 from srffwfs.miscellaneous import pad_array, crop_array
 
 # %% Class definitions
@@ -491,17 +492,18 @@ for shift_name, pupil_shifts in tqdm(pupil_shifts_dict_bioedge.items()):
 
 # %% Closed-loop tests
 
+# pyramid
+
 modal_projector = None
 seed = 0
 use_weighted_svd = False
 use_map = True
 
 # set flux of the ngs
-photon_flux = (
+photon_flux_pyramid = (
     n_photons_per_frame * loop_frequency / telescope_surface
 )  # nPhoton = # photons per s per m2
-
-ngs.nPhoton = photon_flux
+ngs.nPhoton = photon_flux_pyramid
 
 ngs**tel * dm * pyramid  # coupling telescope, DM and WFS is mandatory to compute the number of photons per measurement point
 
@@ -688,12 +690,13 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
 
 # %% bioedge
 
-bioedge_handicap_factor = 0.5
+bioedge_handicap_factor = 1.0
 
 # set flux of the ngs
-ngs.nPhoton = bioedge_handicap_factor * (
+photon_flux_bioedge = bioedge_handicap_factor * (
     n_photons_per_frame * loop_frequency / telescope_surface
 )  # nPhoton = # photons per s per m2
+ngs.nPhoton = photon_flux_bioedge
 
 for shift_name, calibrated_bioedge in calibrated_bioedges.items():
     interaction_matrix = calibrated_bioedge.interaction_matrix
@@ -716,7 +719,9 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
         )
 
     if use_map:
-        c_b = (detector_read_out_noise / n_photons_per_frame) ** 2
+        c_b = (
+            detector_read_out_noise / bioedge_handicap_factor * n_photons_per_frame
+        ) ** 2
         if detector_photon_noise:
             c_b += calibrated_bioedge.wfs.referenceSignal / n_photons_per_frame
         reconstructor = compute_map_reconstructor(
@@ -867,98 +872,6 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
         )
 
 # %% plot contrast
-
-
-def compute_contrast(residual_phase_screens, pupil, pad=2, remove_tip_tilt=False):
-    """
-    Compute the long-exposure contrast (2D map) with an ideal coronagraph.
-
-    The residual phase screens are converted to a complex field with constant
-    amplitude over the pupil. The piston field mode (the component of the field
-    proportional to the pupil) is removed to emulate an ideal coronagraph, and
-    the resulting PSFs are averaged over all screens.
-
-    Parameters
-    ----------
-    residual_phase_screens : numpy.ndarray
-        Residual phase screens in radians, with shape ``(npx, npx, n_screens)``.
-    pupil : numpy.ndarray
-        Binary pupil mask of shape ``(npx, npx)``. The amplitude is assumed
-        constant over the pupil.
-    pad : int, optional
-        Zero-padding factor. It sets the PSF sampling, in pixels per
-        :math:`\\lambda/D`. Default is 2.
-    remove_tip_tilt : bool, optional
-        If True, subtract the least-squares piston/tip/tilt fitted over the
-        pupil from each screen before computing the field (perfect tip-tilt
-        correction applied independently to each screen). Default is False.
-
-    Returns
-    -------
-    long_exposure : numpy.ndarray
-        Long-exposure coronagraphic PSF of shape ``(npx * pad, npx * pad)``,
-        normalised by the peak of the diffraction-limited (non-coronagraphic)
-        PSF.
-
-    Examples
-    --------
-    >>> contrast = compute_contrast(screens, tel.pupil, pad=2, remove_tip_tilt=True)
-    >>> contrast.shape
-    (512, 512)
-
-    Author
-    ------
-    François Leroux (ONERA), Claude Sonnet 5.5 (Anthropic)
-
-    Date
-    ----
-    2026-11-23
-    """
-    pupil = np.asarray(pupil, dtype=float)
-    mask = pupil > 0
-    npx, _, n_screens = residual_phase_screens.shape
-    n_fft = pad * npx
-    pupil_norm = np.sum(pupil**2)
-
-    # normalisation: peak of the diffraction-limited PSF
-    peak = np.abs(np.fft.fft2(pupil, s=(n_fft, n_fft))).max() ** 2
-
-    # piston / tip / tilt basis restricted to the pupil pixels, and its pseudo-inverse
-    if remove_tip_tilt:
-        y, x = np.mgrid[:npx, :npx]
-        x = (x - x[mask].mean()) / npx
-        y = (y - y[mask].mean()) / npx
-        ptt_basis = np.stack(
-            [np.ones(mask.sum()), x[mask], y[mask]], axis=1
-        )  # (n_in_pupil, 3)
-        ptt_pinv = np.linalg.pinv(ptt_basis)  # (3, n_in_pupil)
-
-    long_exposure = np.zeros((n_fft, n_fft))
-
-    # accumulate screen by screen to avoid a (n_fft, n_fft, n_screens) complex cube
-    for k in tqdm(range(n_screens), desc="Computing long-exposure contrast"):
-        phase = np.where(mask, residual_phase_screens[:, :, k], 0.0)
-
-        if remove_tip_tilt:
-            phase_in_pupil = phase[mask]
-            coefs = ptt_pinv @ phase_in_pupil
-            phase[mask] = phase_in_pupil - ptt_basis @ coefs
-
-        field = pupil * np.exp(1j * phase)
-
-        # ideal coronagraph: remove the piston (pupil-shaped) component of the field
-        field -= (np.sum(pupil * field) / pupil_norm) * pupil
-
-        psf = np.abs(np.fft.fftshift(np.fft.fft2(field, s=(n_fft, n_fft)))) ** 2
-        long_exposure += psf
-
-    long_exposure /= n_screens
-    long_exposure /= peak
-
-    return long_exposure
-
-
-# %%
 
 n_bootstrap_frames = 25
 remove_tip_tilt = False
