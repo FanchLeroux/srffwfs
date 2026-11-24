@@ -56,7 +56,7 @@ fig_dir = config.root_dir / "outputs"
 # phot.R = [0.640e-6, 0.150e-6, 4.01e12/cst]
 wavelength = 640e-9  # [m] wavelength of the guide star
 optical_band = "R"  # optical band of the guide star
-n_photons_per_controlled_mode = 100
+n_photons_per_frame = 100 * 400
 
 # ------------------ ATMOSPHERE ----------------- #
 
@@ -220,7 +220,8 @@ pupil_shifts_dict_pyramid = {
     "quincux": pupil_shifts_quincux_pyramid,
 }
 pupil_shifts_dict_pyramid = {
-    "horizontal": pupil_shifts_horizontal_pyramid,
+    "zeros": pupil_shifts_zeros_pyramid,
+    "quincux": pupil_shifts_quincux_pyramid,
 }
 
 # Bioedge
@@ -306,7 +307,8 @@ pupil_shifts_dict_bioedge = {
     "quincux": pupil_shifts_quincux_bioedge,
 }
 pupil_shifts_dict_bioedge = {
-    "horizontal": pupil_shifts_horizontal_bioedge,
+    "zeros": pupil_shifts_zeros_bioedge,
+    "quincux": pupil_shifts_quincux_bioedge,
 }
 
 # %% Build objects
@@ -491,15 +493,15 @@ for shift_name, pupil_shifts in tqdm(pupil_shifts_dict_bioedge.items()):
 
 modal_projector = None
 seed = 0
-use_weighted_svd = True
+use_weighted_svd = False
 use_map = True
 
 # set flux of the ngs
-ngs.nPhoton = (
-    n_photons_per_controlled_mode
-    * loop_frequency
-    / (telescope_surface / n_controlled_modes)
+photon_flux = (
+    n_photons_per_frame * loop_frequency / telescope_surface
 )  # nPhoton = # photons per s per m2
+
+ngs.nPhoton = photon_flux
 
 ngs**tel * dm * pyramid  # coupling telescope, DM and WFS is mandatory to compute the number of photons per measurement point
 
@@ -685,6 +687,13 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
         )
 
 # %% bioedge
+
+bioedge_handicap_factor = 0.5
+
+# set flux of the ngs
+ngs.nPhoton = bioedge_handicap_factor * (
+    n_photons_per_frame * loop_frequency / telescope_surface
+)  # nPhoton = # photons per s per m2
 
 for shift_name, calibrated_bioedge in calibrated_bioedges.items():
     interaction_matrix = calibrated_bioedge.interaction_matrix
