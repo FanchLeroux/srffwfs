@@ -44,9 +44,6 @@ class CalibratedWfs:
     long_exposure: np.ndarray | None = None
 
 
-# %% Fucntions definitions
-
-
 # %% outputs directory
 
 config = Config()
@@ -125,6 +122,192 @@ n_controlled_modes = int(
     2.0 * np.pi * (n_subaperture / 2) ** 2
 )  # number of controlled modes
 use_weighted_svd = True  # use weighted truncated SVD reconstructor
+
+# ------------------- SR shifts ------------------- #
+
+# super resolved pyramid - define the pupil shifts to be applied to the WFS
+pupil_shifts_zeros_pyramid = [
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+]
+pupil_shifts_horizontal_pyramid = [
+    [
+        0.25,
+        0.25,
+        -0.25,
+        -0.25,
+    ],
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+]
+pupil_shifts_vertical_pyramid = [
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+    [
+        0.25,
+        0.25,
+        -0.25,
+        -0.25,
+    ],
+]
+pupil_shifts_hv_pyramid = [
+    [
+        0.25,
+        0.0,
+        -0.25,
+        0.0,
+    ],
+    [
+        0.0,
+        0.25,
+        0.0,
+        -0.25,
+    ],
+]
+pupil_shifts_quincux_pyramid = [
+    [
+        0.25,
+        -0.25,
+        -0.25,
+        0.25,
+    ],
+    [
+        -0.25,
+        -0.25,
+        0.25,
+        0.25,
+    ],
+]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
+pupil_shifts_alternative_quincux = [
+    [
+        -0.25,
+        -0.25,
+        0.25,
+        0.25,
+    ],
+    [
+        -0.25,
+        -0.25,
+        0.25,
+        0.25,
+    ],
+]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
+
+# define a dictionary to loop over the different pupil shifts configurations
+pupil_shifts_dict_pyramid = {
+    "zeros": pupil_shifts_zeros_pyramid,
+    "horizontal": pupil_shifts_horizontal_pyramid,
+    "vertical": pupil_shifts_vertical_pyramid,
+    "hv": pupil_shifts_hv_pyramid,
+    "quincux": pupil_shifts_quincux_pyramid,
+}
+pupil_shifts_dict_pyramid = {
+    "horizontal": pupil_shifts_horizontal_pyramid,
+}
+
+# Bioedge
+# super resolved bioedge. Each row of pupil is one bioedge filter
+# quadrant numbering: 4, 3, 2, 1 (top left, top right, bottom left, bottom right)
+
+pupil_shifts_zeros_bioedge = [
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+]
+pupil_shifts_horizontal_bioedge = [
+    [
+        0.25,
+        -0.25,
+        0.25,
+        -0.25,
+    ],
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+]
+pupil_shifts_vertical_bioedge = [
+    [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ],
+    [
+        0.25,
+        -0.25,
+        0.25,
+        -0.25,
+    ],
+]
+pupil_shifts_hv_bioedge = [
+    [
+        0.25,
+        0.0,
+        -0.25,
+        0.0,
+    ],
+    [
+        0.0,
+        0.25,
+        0.0,
+        -0.25,
+    ],
+]
+pupil_shifts_quincux_bioedge = [
+    [
+        0.25,
+        -0.25,
+        0.25,
+        -0.25,
+    ],
+    [
+        0.25,
+        -0.25,
+        -0.25,
+        0.25,
+    ],
+]
+
+pupil_shifts_dict_bioedge = {
+    "zeros": pupil_shifts_zeros_bioedge,
+    "horizontal": pupil_shifts_horizontal_bioedge,
+    "vertical": pupil_shifts_vertical_bioedge,
+    "hv": pupil_shifts_hv_bioedge,
+    "quincux": pupil_shifts_quincux_bioedge,
+}
+pupil_shifts_dict_bioedge = {
+    "horizontal": pupil_shifts_horizontal_bioedge,
+}
 
 # %% Build objects
 
@@ -225,204 +408,6 @@ n_measurement_points_pyramid = int(np.sum(pyramid.validSignal) / 4)
 n_measurement_points_bioedge = int(np.sum(bioedge.validSignal) / 4)
 reference_intensities_2d_no_sr_pyramid = pyramid.referenceSignal_2D
 reference_intensities_2d_no_sr_bioedge = bioedge.referenceSignal_2D
-
-# %% super resolved pyramid - define the pupil shifts to be applied to the WFS
-
-pupil_shifts_zeros = [
-    [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-    ],
-    [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-    ],
-]
-
-pupil_shifts_horizontal = [
-    [
-        0.25,
-        0.25,
-        -0.25,
-        -0.25,
-    ],
-    [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-    ],
-]
-
-pupil_shifts_vertical = [
-    [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-    ],
-    [
-        0.25,
-        0.25,
-        -0.25,
-        -0.25,
-    ],
-]
-
-pupil_shifts_hv = [
-    [
-        0.25,
-        0.0,
-        -0.25,
-        0.0,
-    ],
-    [
-        0.0,
-        0.25,
-        0.0,
-        -0.25,
-    ],
-]
-
-pupil_shifts_quincux = [
-    [
-        0.25,
-        -0.25,
-        -0.25,
-        0.25,
-    ],
-    [
-        -0.25,
-        -0.25,
-        0.25,
-        0.25,
-    ],
-]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
-
-pupil_shifts_alternative_quincux = [
-    [
-        -0.25,
-        -0.25,
-        0.25,
-        0.25,
-    ],
-    [
-        -0.25,
-        -0.25,
-        0.25,
-        0.25,
-    ],
-]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
-
-# define a dictionary to loop over the different pupil shifts configurations
-pupil_shifts_dict_pyramid = {
-    "zeros": pupil_shifts_zeros,
-    "horizontal": pupil_shifts_horizontal,
-    "vertical": pupil_shifts_vertical,
-    "hv": pupil_shifts_hv,
-    "quincux": pupil_shifts_quincux,
-}
-
-pupil_shifts_dict_pyramid = {
-    "horizontal": pupil_shifts_horizontal,
-}
-
-# %% Bioedge
-
-
-# super resolved bioedge. Each row of pupil is one bioedge filter
-# quadrant numbering: 4, 3, 2, 1 (top left, top right, bottom left, bottom right)
-
-pupil_shifts_zeros = [
-    [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-    ],
-    [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-    ],
-]
-
-pupil_shifts_horizontal = [
-    [
-        0.25,
-        -0.25,
-        0.25,
-        -0.25,
-    ],
-    [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-    ],
-]
-
-pupil_shifts_vertical = [
-    [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-    ],
-    [
-        0.25,
-        -0.25,
-        0.25,
-        -0.25,
-    ],
-]
-
-pupil_shifts_hv = [
-    [
-        0.25,
-        0.0,
-        -0.25,
-        0.0,
-    ],
-    [
-        0.0,
-        0.25,
-        0.0,
-        -0.25,
-    ],
-]
-
-pupil_shifts_quincux = [
-    [
-        0.25,
-        -0.25,
-        0.25,
-        -0.25,
-    ],
-    [
-        0.25,
-        -0.25,
-        -0.25,
-        0.25,
-    ],
-]  # [pixel] [sx,sy] to be applied with wfs.apply_shift_wfs() method (for bioedge)
-
-pupil_shifts_dict_bioedge = {
-    "zeros": pupil_shifts_zeros,
-    "horizontal": pupil_shifts_horizontal,
-    "vertical": pupil_shifts_vertical,
-    "hv": pupil_shifts_hv,
-    "quincux": pupil_shifts_quincux,
-}
-
-pupil_shifts_dict_bioedge = {
-    "horizontal": pupil_shifts_horizontal,
-}
 
 # %% Precompute shifted and calibrated WFS for every configuration.
 
