@@ -26,6 +26,8 @@ from OOPAO.BioEdge import BioEdge
 from OOPAO.Detector import Detector
 from OOPAO.calibration.InteractionMatrix import InteractionMatrix
 
+from maoppy.utils import circavg
+
 from srffwfs.pattern import get_circular_pupil
 from srffwfs.modal_bases.KL_basis import compute_KL_basis
 from srffwfs.sensitivity import compute_photon_noise_sensitivity
@@ -49,6 +51,8 @@ class CalibratedWfs:
     closed_loop_results: ClosedLoopResult | None = None
     long_exposure: np.ndarray | None = None
     long_exposure_coronograph: np.ndarray | None = None
+    radial_average: np.ndarray | None = None
+    radial_average_coronograph: np.ndarray | None = None
 
 
 # %% outputs directory
@@ -63,7 +67,7 @@ fig_dir = config.root_dir / "outputs"
 # phot.R = [0.640e-6, 0.150e-6, 4.01e12/cst]
 wavelength = 640e-9  # [m] wavelength of the guide star
 optical_band = "R"  # optical band of the guide star
-n_photons_per_frame = 1_000.0  # number of photons per frame
+n_photons_per_frame = 10_000.0  # number of photons per frame
 
 # ------------------ ATMOSPHERE ----------------- #
 
@@ -688,7 +692,7 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
             f"long exposure psf fitting limited ideal coronagraph\n{shift_name} shifts"
         )
 
-# %% bioedge
+# bioedge
 
 bioedge_handicap_factor = 1.0
 
@@ -870,39 +874,71 @@ n_bootstrap_frames = 25
 remove_tip_tilt = False
 pupil = tel.pupil.astype(float)
 
-for calibrated_pyramid, calibrated_bioedge in zip(
-    calibrated_pyramids.values(), calibrated_bioedges.values()
-):
-    calibrated_pyramid.long_exposure = np.sum(
-        calibrated_pyramid.closed_loop_results.short_exposure_psf[
-            :, :, n_bootstrap_frames:
-        ],
-        axis=2,
+for cal in [*calibrated_pyramids.values(), *calibrated_bioedges.values()]:
+    results = cal.closed_loop_results
+    cal.long_exposure = results.short_exposure_psf[:, :, n_bootstrap_frames:].sum(
+        axis=2
     )
-    calibrated_pyramid.long_exposure /= calibrated_pyramid.long_exposure.max()
-    calibrated_bioedge.long_exposure = np.sum(
-        calibrated_bioedge.closed_loop_results.short_exposure_psf[
-            :, :, n_bootstrap_frames:
-        ],
-        axis=2,
-    )
-    calibrated_bioedge.long_exposure /= calibrated_bioedge.long_exposure.max()
-    calibrated_pyramid.long_exposure_coronograph = compute_contrast(
-        calibrated_pyramid.closed_loop_results.residual_phase_screens[
-            :, :, n_bootstrap_frames:
-        ],
+    cal.long_exposure /= cal.long_exposure.max()
+    cal.long_exposure_coronograph = compute_contrast(
+        results.residual_phase_screens[:, :, n_bootstrap_frames:],
         pupil,
         pad=padding_factor,
         remove_tip_tilt=remove_tip_tilt,
     )
-    calibrated_bioedge.long_exposure_coronograph = compute_contrast(
-        calibrated_bioedge.closed_loop_results.residual_phase_screens[
-            :, :, n_bootstrap_frames:
+    cal.radial_average = circavg(
+        cal.long_exposure,
+        center=[
+            cal.long_exposure.shape[0] // 2,
+            cal.long_exposure.shape[1] // 2,
         ],
-        pupil,
-        pad=padding_factor,
-        remove_tip_tilt=remove_tip_tilt,
     )
+    cal.radial_average_coronograph = circavg(
+        cal.long_exposure_coronograph,
+        center=[
+            cal.long_exposure_coronograph.shape[0] // 2,
+            cal.long_exposure_coronograph.shape[1] // 2,
+        ],
+    )
+
+# %%
+
+# crop geometry: padding_factor pixels per lambda/D
+n_pix_crop = int(n_actuator * padding_factor * field_of_view_factor)
+# radial coordinate in lambda/D
+r = np.arange(n_pix_crop // 2) / padding_factor
+
+plt.figure()
+plt.plot(
+    r, calibrated_pyramids["quincux"].radial_average[: n_pix_crop // 2], label="Pyramid"
+)
+plt.plot(
+    r,
+    calibrated_bioedges["quincux"].radial_average[: n_pix_crop // 2],
+    label="Bi-O edge",
+)
+plt.yscale("log")
+plt.xlabel("lambda/D")
+plt.ylabel("Normalized intensity")
+plt.title("Radial average of the long exposure PSF")
+plt.legend()
+
+plt.figure()
+plt.plot(
+    r[1 : n_pix_crop // 2],
+    calibrated_pyramids["quincux"].radial_average_coronograph[1 : n_pix_crop // 2],
+    label="Pyramid",
+)
+plt.plot(
+    r[1 : n_pix_crop // 2],
+    calibrated_bioedges["quincux"].radial_average_coronograph[1 : n_pix_crop // 2],
+    label="Bi-O edge",
+)
+plt.yscale("log")
+plt.xlabel("lambda/D")
+plt.ylabel("Contrast")
+plt.title("Radial average of the long exposure PSF after coronagraph")
+plt.legend()
 
 # %% plot done by claude
 
@@ -1023,6 +1059,94 @@ with plt.rc_context(PAPER_STYLE):
         stem = f"long_exposure_before_after_coronograph_pyr_{calibrated_pyramid.name}_bio_{calibrated_bioedge.name}_{n_photons_per_frame:.0f}_photons_per_frame"
         fig.savefig(fig_dir / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.01)
         fig.savefig(fig_dir / f"{stem}.png", bbox_inches="tight", pad_inches=0.01)
+
+# %%
+
+# %% radial average plots
+
+# ------------------------- figure settings ------------------------- #
+
+COLUMN_WIDTH_IN = 3.5  # single column; use ~7.2 to span both columns
+RADIAL_HEIGHT_IN = 3.6
+
+PAPER_STYLE = {
+    "mathtext.fontset": "cm",
+    "font.size": 8,
+    "axes.titlesize": 8,
+    "axes.labelsize": 8,
+    "xtick.labelsize": 7,
+    "ytick.labelsize": 7,
+    "legend.fontsize": 7,
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "xtick.top": True,
+    "ytick.right": True,
+    "axes.linewidth": 0.6,
+    "lines.linewidth": 1.2,
+    "savefig.dpi": 300,
+}
+
+# crop geometry: padding_factor pixels per lambda/D
+n_pix_crop = int(n_actuator * padding_factor * field_of_view_factor)
+n_half = n_pix_crop // 2
+half_fov = n_actuator * field_of_view_factor / 2  # [lambda/D]
+r = np.arange(n_half) / padding_factor  # [lambda/D]
+
+PANELS = (  # (attribute, y label, first index to plot)
+    ("radial_average", "Normalized intensity", 0),
+    ("radial_average_coronograph", "Contrast", 1),  # skip r = 0
+)
+CURVES = (  # (label, color, linestyle)
+    ("Pyramid", "C0", "-"),
+    ("Bi-O edge", "C3", "--"),
+)
+
+# ----------------------------- plot ----------------------------- #
+
+with plt.rc_context(PAPER_STYLE):
+    for calibrated_pyramid, calibrated_bioedge in zip(
+        calibrated_pyramids.values(), calibrated_bioedges.values()
+    ):
+        fig, axes = plt.subplots(
+            2,
+            1,
+            figsize=(COLUMN_WIDTH_IN, RADIAL_HEIGHT_IN),
+            sharex=True,
+            layout="constrained",
+        )
+        fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02, hspace=0.02)
+
+        for ax, (attr, ylabel, start), tag in zip(axes, PANELS, ("(a)", "(b)")):
+            for (label, color, ls), cal in zip(
+                CURVES, (calibrated_pyramid, calibrated_bioedge)
+            ):
+                ax.plot(
+                    r[start:],
+                    getattr(cal, attr)[start:n_half],
+                    color=color,
+                    ls=ls,
+                    label=label,
+                )
+            ax.set_yscale("log")
+            ax.set_xlim(0, half_fov)
+            ax.set_ylabel(ylabel, labelpad=1)
+            ax.tick_params(pad=2)
+            ax.grid(True, which="major", alpha=0.3, lw=0.4)
+            ax.text(0.03, 0.94, tag, transform=ax.transAxes, va="top", weight="bold")
+
+        axes[0].legend(frameon=False, loc="upper right")
+        axes[0].set_title(
+            f"{calibrated_pyramid.name} / {calibrated_bioedge.name}", pad=3
+        )
+        axes[1].set_xlabel(r"Separation [$\lambda/D$]", labelpad=1)
+
+        stem = f"radial_average_pyr_{calibrated_pyramid.name}_bio_{calibrated_bioedge.name}_{n_photons_per_frame:.0f}_photons_per_frame"
+        fig.savefig(fig_dir / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.01)
+        fig.savefig(fig_dir / f"{stem}.png", bbox_inches="tight", pad_inches=0.01)
+
+# %%
+
+plt.show()
 
 # %%
 

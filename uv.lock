@@ -628,6 +628,20 @@ wheels = [
 ]
 
 [[package]]
+name = "maoppy"
+version = "1.7.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "astropy" },
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/48/10/c8aa7b0850dfea0854b82483e35c0e55e882751f6cdebb682b68c9a8e181/maoppy-1.7.3.tar.gz", hash = "sha256:71f5ecbb4b5823e7ea256dcb3be4ee4a9f188f51f3ab7ab492bccbb015483127", size = 65044, upload-time = "2026-07-03T16:52:21.958Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7b/48/d624a170154ac111829dbc3af90ae7d28aafd29c25e6944c98b31ee8ea16/maoppy-1.7.3-py3-none-any.whl", hash = "sha256:d845c31df1ed17007d3d6455d2c6e71ff5d1fdb46e2c3aa0c576b6eacf8442ce", size = 55781, upload-time = "2026-07-03T16:52:20.89Z" },
+]
+
+[[package]]
 name = "matplotlib"
 version = "3.11.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1469,6 +1483,7 @@ name = "srffwfs"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "maoppy" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "oopao" },
@@ -1489,6 +1504,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "cupy-cuda12x", extras = ["ctk"], marker = "extra == 'gpu'", specifier = ">=14.2.0" },
+    { name = "maoppy", specifier = ">=1.7.3" },
     { name = "matplotlib", specifier = ">=3.11.1" },
     { name = "numpy", specifier = ">=2.5.3" },
     { name = "oopao", specifier = ">=1.0.0" },
