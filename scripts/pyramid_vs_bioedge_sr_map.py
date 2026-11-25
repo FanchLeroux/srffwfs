@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 
 from srffwfs.config import Config
 from srffwfs import (
@@ -67,7 +68,7 @@ fig_dir = config.root_dir / "outputs"
 # phot.R = [0.640e-6, 0.150e-6, 4.01e12/cst]
 wavelength = 640e-9  # [m] wavelength of the guide star
 optical_band = "R"  # optical band of the guide star
-n_photons_per_frame = 10_000.0  # number of photons per frame
+n_photons_per_frame = 100_000.0  # number of photons per frame
 
 # ------------------ ATMOSPHERE ----------------- #
 
@@ -518,14 +519,14 @@ ngs.nPhoton = photon_flux_pyramid
 
 ngs**tel * dm * pyramid  # coupling telescope, DM and WFS is mandatory to compute the number of photons per measurement point
 
-n_photons_per_frame = pyramid.cam.frame.sum()  # number of photons per frame
+n_photons_per_frame_pyramid = pyramid.cam.frame.sum()  # number of photons per frame
 
 print(
     f"Photon noise: {detector_photon_noise}\n"
     f"Read-out noise: {detector_read_out_noise}\n"
     f"# photons per second per m^2: {ngs.nPhoton}\n"
-    f"# photons per controlled mode per frame: {n_photons_per_frame / n_controlled_modes}\n"
-    f"# photons per measurement points per frame: {n_photons_per_frame / n_measurement_points_pyramid}"
+    f"# photons per frame: {n_photons_per_frame_pyramid}\n"
+    f"# photons per measurement points per frame: {n_photons_per_frame_pyramid / n_measurement_points_pyramid}"
 )
 
 for shift_name, calibrated_pyramid in calibrated_pyramids.items():
@@ -701,6 +702,18 @@ photon_flux_bioedge = bioedge_handicap_factor * (
     n_photons_per_frame * loop_frequency / telescope_surface
 )  # nPhoton = # photons per s per m2
 ngs.nPhoton = photon_flux_bioedge
+
+ngs**tel * dm * pyramid  # coupling telescope, DM and WFS is mandatory to compute the number of photons per measurement point
+
+n_photons_per_frame_bioedge = pyramid.cam.frame.sum()  # number of photons per frame
+
+print(
+    f"Photon noise: {detector_photon_noise}\n"
+    f"Read-out noise: {detector_read_out_noise}\n"
+    f"# photons per second per m^2: {ngs.nPhoton}\n"
+    f"# photons per frame: {n_photons_per_frame_bioedge}\n"
+    f"# photons per measurement points per frame: {n_photons_per_frame_bioedge / n_measurement_points_pyramid}"
+)
 
 for shift_name, calibrated_bioedge in calibrated_bioedges.items():
     interaction_matrix = calibrated_bioedge.interaction_matrix
@@ -901,52 +914,11 @@ for cal in [*calibrated_pyramids.values(), *calibrated_bioedges.values()]:
         ],
     )
 
-# %%
-
-# crop geometry: padding_factor pixels per lambda/D
-n_pix_crop = int(n_actuator * padding_factor * field_of_view_factor)
-# radial coordinate in lambda/D
-r = np.arange(n_pix_crop // 2) / padding_factor
-
-plt.figure()
-plt.plot(
-    r, calibrated_pyramids["quincux"].radial_average[: n_pix_crop // 2], label="Pyramid"
-)
-plt.plot(
-    r,
-    calibrated_bioedges["quincux"].radial_average[: n_pix_crop // 2],
-    label="Bi-O edge",
-)
-plt.yscale("log")
-plt.xlabel("lambda/D")
-plt.ylabel("Normalized intensity")
-plt.title("Radial average of the long exposure PSF")
-plt.legend()
-
-plt.figure()
-plt.plot(
-    r[1 : n_pix_crop // 2],
-    calibrated_pyramids["quincux"].radial_average_coronograph[1 : n_pix_crop // 2],
-    label="Pyramid",
-)
-plt.plot(
-    r[1 : n_pix_crop // 2],
-    calibrated_bioedges["quincux"].radial_average_coronograph[1 : n_pix_crop // 2],
-    label="Bi-O edge",
-)
-plt.yscale("log")
-plt.xlabel("lambda/D")
-plt.ylabel("Contrast")
-plt.title("Radial average of the long exposure PSF after coronagraph")
-plt.legend()
-
-# %% plot done by claude
-
-from matplotlib.colors import LogNorm
+# %% plots (claude sonnet 5.5 assisted)
 
 # ------------------------- figure settings ------------------------- #
 
-COLUMN_WIDTH_IN = 3.5  # single column; use ~7.2 to span both columns
+FIGURE_WIDTH_IN = 3.5  # single column; use ~7.2 to span both columns
 FIGURE_HEIGHT_IN = 2.8
 
 PAPER_STYLE = {
@@ -961,33 +933,47 @@ PAPER_STYLE = {
     "savefig.dpi": 300,
 }
 
-cmap = plt.get_cmap("inferno").copy()
-cmap.set_bad("white")  # NaN pixels (non-positive values) are drawn in white
-
-# crop geometry: padding_factor pixels per lambda/D
-n_pix_crop = int(n_actuator * padding_factor * field_of_view_factor)
-half_fov = n_actuator * field_of_view_factor / 2  # [lambda/D]
-extent = (-half_fov, half_fov, -half_fov, half_fov)
-
-ROW_LABELS = ("Before coronagraph", "After coronagraph")
-ROW_CBAR_LABELS = ("Normalized intensity", "Contrast")
-
+PAPER_STYLE = {
+    "mathtext.fontset": "cm",
+    "font.size": 8,
+    "axes.titlesize": 8,
+    "axes.labelsize": 8,
+    "xtick.labelsize": 7,
+    "ytick.labelsize": 7,
+    "legend.fontsize": 7,
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "xtick.top": True,
+    "ytick.right": True,
+    "axes.linewidth": 0.6,
+    "lines.linewidth": 1.2,
+    "savefig.dpi": 300,
+}
 
 # --------------------------- helpers --------------------------- #
 
 
-def prepare_image(image):
-    """Crop the image and replace non-positive values by NaN."""
-    cropped = crop_array(image, n_pix_crop)
-    return np.where(cropped > 0, cropped, np.nan)
-
-
 def decade_limits(images):
     """Colour limits shared by the panels of a row, rounded outward to whole decades."""
-    values = np.concatenate([img[np.isfinite(img)] for img in images])
-    vmin = 10 ** np.floor(np.log10(np.percentile(values, 1)))
+    values = np.concatenate(
+        [img[np.isfinite(img)] for img in images]
+    )  # flatten and remove NaNs/Infs
+    vmin = 10 ** np.floor(
+        np.log10(np.percentile(values, 1))
+    )  # ignore darkest 1% of pixels
     vmax = 10 ** np.ceil(np.log10(values.max()))
     return vmin, vmax
+
+
+# %%
+
+# crop geometry: padding_factor pixels per lambda/D
+n_pix_crop = int(n_actuator * padding_factor * field_of_view_factor)
+half_fov = n_actuator * field_of_view_factor / 2  # [lambda/D]
+extent = (-half_fov, half_fov, -half_fov, half_fov)  # [lambda/D]
+
+ROW_LABELS = ("Before coronagraph", "After coronagraph")
+ROW_CBAR_LABELS = ("Normalized intensity", "Contrast")
 
 
 # ----------------------------- plot ----------------------------- #
@@ -1003,25 +989,25 @@ with plt.rc_context(PAPER_STYLE):
         # rows: before / after coronagraph; columns: pyramid / bi-o edge
         rows = (
             (
-                prepare_image(calibrated_pyramid.long_exposure),
-                prepare_image(calibrated_bioedge.long_exposure),
+                crop_array(calibrated_pyramid.long_exposure, n_pix_crop),
+                crop_array(calibrated_bioedge.long_exposure, n_pix_crop),
             ),
             (
-                prepare_image(calibrated_pyramid.long_exposure_coronograph),
-                prepare_image(calibrated_bioedge.long_exposure_coronograph),
+                crop_array(calibrated_pyramid.long_exposure_coronograph, n_pix_crop),
+                crop_array(calibrated_bioedge.long_exposure_coronograph, n_pix_crop),
             ),
         )
 
         fig, axes = plt.subplots(
             2,
             2,
-            figsize=(COLUMN_WIDTH_IN, FIGURE_HEIGHT_IN),
+            figsize=(FIGURE_WIDTH_IN, FIGURE_HEIGHT_IN),
             sharex=True,
             sharey=True,
             layout="constrained",
         )
         # tight padding [in] around the figure and between panels
-        fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02, wspace=0.02, hspace=0.02)
+        fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02, wspace=0.01, hspace=0.02)
 
         for i, (row_images, row_label, cbar_label) in enumerate(
             zip(rows, ROW_LABELS, ROW_CBAR_LABELS)
@@ -1031,7 +1017,7 @@ with plt.rc_context(PAPER_STYLE):
             for j, image in enumerate(row_images):
                 ax = axes[i, j]
                 im = ax.imshow(
-                    image, cmap=cmap, norm=norm, origin="lower", extent=extent
+                    image, cmap="inferno", norm=norm, origin="lower", extent=extent
                 )
                 ax.locator_params(nbins=4)
                 ax.tick_params(
@@ -1060,37 +1046,18 @@ with plt.rc_context(PAPER_STYLE):
         fig.savefig(fig_dir / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.01)
         fig.savefig(fig_dir / f"{stem}.png", bbox_inches="tight", pad_inches=0.01)
 
-# %%
-
 # %% radial average plots
 
 # ------------------------- figure settings ------------------------- #
 
-COLUMN_WIDTH_IN = 3.5  # single column; use ~7.2 to span both columns
-RADIAL_HEIGHT_IN = 3.6
-
-PAPER_STYLE = {
-    "mathtext.fontset": "cm",
-    "font.size": 8,
-    "axes.titlesize": 8,
-    "axes.labelsize": 8,
-    "xtick.labelsize": 7,
-    "ytick.labelsize": 7,
-    "legend.fontsize": 7,
-    "xtick.direction": "in",
-    "ytick.direction": "in",
-    "xtick.top": True,
-    "ytick.right": True,
-    "axes.linewidth": 0.6,
-    "lines.linewidth": 1.2,
-    "savefig.dpi": 300,
-}
+FIGURE_WIDTH_IN = 3.5  # single column; use ~7.2 to span both columns
+FIGURE_WIDTH_IN = 3.6
 
 # crop geometry: padding_factor pixels per lambda/D
 n_pix_crop = int(n_actuator * padding_factor * field_of_view_factor)
 n_half = n_pix_crop // 2
 half_fov = n_actuator * field_of_view_factor / 2  # [lambda/D]
-r = np.arange(n_half) / padding_factor  # [lambda/D]
+r = np.arange(n_pix_crop // 2) / padding_factor  # [lambda/D]
 
 PANELS = (  # (attribute, y label, first index to plot)
     ("radial_average", "Normalized intensity", 0),
@@ -1110,7 +1077,7 @@ with plt.rc_context(PAPER_STYLE):
         fig, axes = plt.subplots(
             2,
             1,
-            figsize=(COLUMN_WIDTH_IN, RADIAL_HEIGHT_IN),
+            figsize=(FIGURE_WIDTH_IN, FIGURE_WIDTH_IN),
             sharex=True,
             layout="constrained",
         )
@@ -1144,9 +1111,201 @@ with plt.rc_context(PAPER_STYLE):
         fig.savefig(fig_dir / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.01)
         fig.savefig(fig_dir / f"{stem}.png", bbox_inches="tight", pad_inches=0.01)
 
-# %%
+# %% radial average plots: zero shifts vs other configs
 
-plt.show()
+# ------------------------- figure settings ------------------------- #
+
+FIGURE_WIDTH_IN = 3.5  # single column; use ~7.2 to span both columns
+FIGURE_WIDTH_IN = 3.6
+
+
+REFERENCE_CONFIG = "zeros"
+
+# crop geometry: padding_factor pixels per lambda/D
+n_pix_crop = int(n_actuator * padding_factor * field_of_view_factor)
+n_half = n_pix_crop // 2
+half_fov = n_actuator * field_of_view_factor / 2  # [lambda/D]
+r = np.arange(n_half) / padding_factor  # [lambda/D]
+
+PANELS = (  # (attribute, y label, first index to plot)
+    ("radial_average", "Normalized intensity", 0),
+    ("radial_average_coronograph", "Contrast", 1),  # skip r = 0
+)
+CURVE_STYLES = (("k", "-"), ("C3", "--"))  # (reference, other): (color, linestyle)
+WFS_GROUPS = {  # display name -> (file slug, dict of CalibratedWfs)
+    "Pyramid": ("pyr", calibrated_pyramids),
+    "Bi-O edge": ("bio", calibrated_bioedges),
+}
+
+# ----------------------------- plot ----------------------------- #
+
+with plt.rc_context(PAPER_STYLE):
+    for wfs_name, (slug, calibrated) in WFS_GROUPS.items():
+        reference = calibrated[REFERENCE_CONFIG]
+
+        for config, other in calibrated.items():
+            if config == REFERENCE_CONFIG:
+                continue
+
+            fig, axes = plt.subplots(
+                2,
+                1,
+                figsize=(FIGURE_WIDTH_IN, FIGURE_WIDTH_IN),
+                sharex=True,
+                layout="constrained",
+            )
+            fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02, hspace=0.02)
+
+            for ax, (attr, ylabel, start), tag in zip(axes, PANELS, ("(a)", "(b)")):
+                for cal, (color, ls) in zip((reference, other), CURVE_STYLES):
+                    ax.plot(
+                        r[start:],
+                        getattr(cal, attr)[start:n_half],
+                        color=color,
+                        ls=ls,
+                        label=cal.name,
+                    )
+                ax.set_yscale("log")
+                ax.set_xlim(0, half_fov)
+                ax.set_ylabel(ylabel, labelpad=1)
+                ax.tick_params(pad=2)
+                ax.grid(True, which="major", alpha=0.3, lw=0.4)
+                ax.text(
+                    0.03, 0.94, tag, transform=ax.transAxes, va="top", weight="bold"
+                )
+
+            axes[0].legend(frameon=False, loc="upper right")
+            axes[0].set_title(wfs_name, pad=3)
+            axes[1].set_xlabel(r"Separation [$\lambda/D$]", labelpad=1)
+
+            stem = f"radial_average_{slug}_{REFERENCE_CONFIG}_vs_{config}_{n_photons_per_frame:.0f}_photons_per_frame"
+            fig.savefig(fig_dir / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.01)
+            fig.savefig(fig_dir / f"{stem}.png", bbox_inches="tight", pad_inches=0.01)
+
+# %% radial average plots (one 2x2 figure per section)
+
+# ------------------------- figure settings ------------------------- #
+
+FIGURE_WIDTH_IN = 7.2  # spans both columns; use ~3.5 for a single column
+FIGURE_HEIGHT_IN = 3.6
+
+# crop geometry: padding_factor pixels per lambda/D
+n_pix_crop = int(n_actuator * padding_factor * field_of_view_factor)
+n_half = n_pix_crop // 2
+half_fov = n_actuator * field_of_view_factor / 2  # [lambda/D]
+r = np.arange(n_half) / padding_factor  # [lambda/D]
+
+PANELS = (  # (attribute, y label, first index to plot)
+    ("radial_average", "Normalized intensity", 0),
+    ("radial_average_coronograph", "Contrast", 1),  # skip r = 0
+)
+
+
+def plot_radial_grid(columns, title_fn, stem):
+    """
+    columns: list of (column_title, [(cal, label, color, linestyle), ...]).
+    Rows are the PANELS, columns are the entries of `columns`.
+    """
+    fig, axes = plt.subplots(
+        2,
+        len(columns),
+        figsize=(FIGURE_WIDTH_IN, FIGURE_HEIGHT_IN),
+        sharex=True,
+        sharey="row",
+        squeeze=False,
+        layout="constrained",
+    )
+    fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02, wspace=0.02, hspace=0.02)
+
+    for j, (col_title, curves) in enumerate(columns):
+        for i, (attr, ylabel, start) in enumerate(PANELS):
+            ax = axes[i, j]
+            for cal, label, color, ls in curves:
+                ax.plot(
+                    r[start:],
+                    getattr(cal, attr)[start:n_half],
+                    color=color,
+                    ls=ls,
+                    label=label,
+                )
+            ax.set_yscale("log")
+            ax.set_xlim(0, half_fov)
+            ax.tick_params(pad=2)
+            ax.grid(True, which="major", alpha=0.3, lw=0.4)
+            ax.text(
+                0.03,
+                0.94,
+                f"({chr(ord('a') + i * len(columns) + j)})",
+                transform=ax.transAxes,
+                va="top",
+                weight="bold",
+            )
+            if j == 0:
+                ax.set_ylabel(ylabel, labelpad=1)
+            if i == 0:
+                ax.set_title(title_fn(col_title), pad=3)
+            if i == len(PANELS) - 1:
+                ax.set_xlabel(r"Separation [$\lambda/D$]", labelpad=1)
+
+    axes[0, 0].legend(frameon=False, loc="upper right")
+
+    fig.savefig(fig_dir / f"{stem}.pdf", bbox_inches="tight", pad_inches=0.01)
+    fig.savefig(fig_dir / f"{stem}.png", bbox_inches="tight", pad_inches=0.01)
+    return fig
+
+
+# ---------- section 1: Pyramid vs Bi-O edge, one column per config ---------- #
+
+columns = [
+    (
+        pyr.name,
+        [
+            (pyr, "Pyramid", "C0", "-"),
+            (bio, "Bi-O edge", "C3", "--"),
+        ],
+    )
+    for pyr, bio in zip(calibrated_pyramids.values(), calibrated_bioedges.values())
+]
+names = "_".join(name for name, _ in columns)
+
+with plt.rc_context(PAPER_STYLE):
+    plot_radial_grid(
+        columns,
+        title_fn=lambda name: f"{name} shifts",
+        stem=f"radial_average_pyr_vs_bio_{names}_{n_photons_per_frame:.0f}_photons_per_frame",
+    )
+
+# ---------- section 2: zero shifts vs other config, one column per WFS ---------- #
+
+REFERENCE_CONFIG = "zeros"
+CURVE_STYLES = (("k", "-"), ("C3", "--"))  # (reference, other): (color, linestyle)
+WFS_GROUPS = {  # display name -> dict of CalibratedWfs
+    "Pyramid": calibrated_pyramids,
+    "Bi-O edge": calibrated_bioedges,
+}
+
+columns = []
+for wfs_name, calibrated in WFS_GROUPS.items():
+    reference = calibrated[REFERENCE_CONFIG]
+    for config, other in calibrated.items():
+        if config == REFERENCE_CONFIG:
+            continue
+        columns.append(
+            (
+                wfs_name,
+                [
+                    (cal, f"{cal.name} shifts", color, ls)
+                    for cal, (color, ls) in zip((reference, other), CURVE_STYLES)
+                ],
+            )
+        )
+
+with plt.rc_context(PAPER_STYLE):
+    plot_radial_grid(
+        columns,
+        title_fn=lambda name: name,
+        stem=f"radial_average_{REFERENCE_CONFIG}_vs_others_{n_photons_per_frame:.0f}_photons_per_frame",
+    )
 
 # %%
 
