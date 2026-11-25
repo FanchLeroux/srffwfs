@@ -460,8 +460,6 @@ for shift_name, pupil_shifts in tqdm(pupil_shifts_dict_pyramid.items()):
         interaction_matrix=interaction_matrix_pyramid,
     )
 
-# %%
-
 for shift_name, pupil_shifts in tqdm(pupil_shifts_dict_bioedge.items()):
 
     bioedge = BioEdge(
