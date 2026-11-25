@@ -68,7 +68,7 @@ fig_dir = config.root_dir / "outputs"
 # phot.R = [0.640e-6, 0.150e-6, 4.01e12/cst]
 wavelength = 640e-9  # [m] wavelength of the guide star
 optical_band = "R"  # optical band of the guide star
-n_photons_per_frame = 1_000.0  # number of photons per frame
+n_photons_per_frame = 10_000.0  # number of photons per frame
 
 # ------------------ ATMOSPHERE ----------------- #
 
