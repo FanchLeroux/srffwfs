@@ -68,7 +68,7 @@ fig_dir = config.root_dir / "outputs"
 # phot.R = [0.640e-6, 0.150e-6, 4.01e12/cst]
 wavelength = 640e-9  # [m] wavelength of the guide star
 optical_band = "R"  # optical band of the guide star
-n_photons_per_frame = 100_000.0  # number of photons per frame
+n_photons_per_frame = 1_000.0  # number of photons per frame
 
 # ------------------ ATMOSPHERE ----------------- #
 
@@ -1048,7 +1048,7 @@ half_fov = n_actuator * field_of_view_factor / 2  # [lambda/D]
 r = np.arange(n_half) / padding_factor  # [lambda/D]
 
 PANELS = (  # (attribute, y label, first index to plot)
-    ("radial_average", "Normalized intensity", 0),
+    ("radial_average", "PSF Normalized intensity", 0),
     ("radial_average_coronograph", "Contrast", 1),  # skip r = 0
 )
 
@@ -1086,7 +1086,7 @@ def plot_radial_grid(columns, title_fn, stem):
             ax.grid(False, which="major", alpha=0.3, lw=0.4)
             ax.text(
                 0.1,
-                0.94,
+                0.9,
                 f"({chr(ord('a') + i * len(columns) + j)})",
                 transform=ax.transAxes,
                 va="top",
