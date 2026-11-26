@@ -5,7 +5,6 @@ tmux new-session -d -s mysession "uv run python path/to/script.py"
 
 # %% imports
 
-from copy import deepcopy
 from dataclasses import dataclass
 from tqdm import tqdm
 
@@ -29,7 +28,6 @@ from OOPAO.calibration.InteractionMatrix import InteractionMatrix
 
 from maoppy.utils import circavg
 
-from srffwfs.pattern import get_circular_pupil
 from srffwfs.modal_bases.KL_basis import compute_KL_basis
 from srffwfs.sensitivity import compute_photon_noise_sensitivity
 from srffwfs.reconstructor import (
@@ -39,7 +37,7 @@ from srffwfs.reconstructor import (
 )
 from srffwfs.closed_loop import close_the_loop, ClosedLoopResult
 from srffwfs.performance_metric import compute_contrast
-from srffwfs.miscellaneous import pad_array, crop_array
+from srffwfs.miscellaneous import crop_array
 
 # %% Class definitions
 
@@ -537,18 +535,6 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
             interaction_matrix, c_phi, n_controlled_modes
         )
 
-        plt.figure()
-        plt.plot(singular_values)
-        plt.yscale("log")
-        plt.title(
-            f"Singular values of the weighted interaction matrix\n{shift_name} shifts"
-        )
-        plt.xlabel("# modes")
-        plt.ylabel("Singular value")
-        plt.axvline(
-            x=n_controlled_modes, color="r", linestyle="--", label="modal cutoff"
-        )
-
     if use_map:
         c_b = (detector_read_out_noise / n_photons_per_frame) ** 2
         if detector_photon_noise:
@@ -584,7 +570,7 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
     calibrated_pyramid.wfs.cam.readoutNoise = 0.0
     ngs**tel
 
-    closed_loop_results = close_the_loop(
+    calibrated_pyramid.closed_loop_results = close_the_loop(
         ngs,
         atm,
         tel,
@@ -605,93 +591,7 @@ for shift_name, calibrated_pyramid in calibrated_pyramids.items():
         modal_projector=modal_projector,
     )
 
-    calibrated_pyramid.closed_loop_results = closed_loop_results
 
-    # post processing
-
-    long_exposure_coronograph_psf_lse_sr = np.sum(
-        closed_loop_results.short_exposure_psf[:, :, 100:], axis=2
-    )
-
-    # plots
-
-    # noise propagation
-    plt.figure()
-    plt.plot(np.diag(reconstructor @ reconstructor.T) / calibrated_pyramid.wfs.nSignal)
-    plt.yscale("log")
-    plt.title(f"modal uniform noise propagation\n{shift_name} shifts")
-    plt.xlabel("# modes")
-
-    fitting_error = (
-        np.std(
-            closed_loop_results.fitting_limited_phase_screens[tel.pupil.flatten(), :],
-            axis=0,
-        )
-        if modal_projector is not None
-        else 0.0
-    )
-    # residuals
-    plt.figure()
-    plt.plot(closed_loop_results.total, label="total")
-    plt.plot(closed_loop_results.residual, label="residual")
-    plt.plot(fitting_error, label="fitting error")
-    plt.xlabel("loop iteration")
-    plt.ylabel("residual phase RMS [nm]")
-    plt.title(f"Closed Loop residuals\n{shift_name} shifts")
-    plt.legend()
-
-    # strehls
-    plt.figure()
-    plt.plot(closed_loop_results.strehl, label="strehl")
-    plt.ylabel("strehl phase RMS [nm]")
-    plt.title(f"Closed Loop strehls\n{shift_name} shifts")
-    plt.legend()
-
-    # long exposure PSF
-    plt.figure()
-    plt.imshow(
-        np.log(long_exposure_coronograph_psf_lse_sr),
-        norm="linear",
-        cmap="inferno",
-    )
-    n_controlled_modes_str = (
-        "MAP" if use_map else f"{n_controlled_modes} controlled modes"
-    )
-    plt.title(
-        f"long_exposure_coronograph_psf_lse_sr\nPyramid - {n_controlled_modes_str}\n{shift_name} shifts"
-    )
-
-    if modal_projector is not None:
-        # ideal coronograph fitting limited
-        pupil = tel.pupil.astype(float)
-        n_pix, pad = tel.resolution, 2
-        opd = (
-            closed_loop_results.fitting_limited_phase_screens.copy()
-        )  # (n_pix**2, n_iter)
-        field = pupil.reshape(-1, 1) * np.exp(1j * 2 * np.pi / ngs.wavelength * opd)
-        field = field.reshape(n_pix, n_pix, -1)  # zero outside the pupil
-        # ideal coronagraph: remove the pupil mode, E - <E,P>/<P,P> * P
-        field -= (
-            np.sum(pupil[..., None] * field, axis=(0, 1)) / np.sum(pupil**2)
-        ) * pupil[..., None]
-        # long-exposure PSF
-        psf_le = np.mean(
-            np.abs(
-                np.fft.fftshift(
-                    np.fft.fft2(field, s=(pad * n_pix,) * 2, axes=(0, 1)), axes=(0, 1)
-                )
-            )
-            ** 2,
-            axis=2,
-        )
-        psf_le /= (
-            np.abs(np.fft.fft2(pupil, s=(pad * n_pix,) * 2)).max() ** 2
-        )  # normalise by diffraction-limited peak
-        plt.figure()
-        plt.imshow(psf_le, norm="linear", cmap="inferno")
-        plt.title(
-            f"long exposure psf fitting limited ideal coronagraph\n{shift_name} shifts"
-        )
 
 # bioedge
 
@@ -721,18 +621,6 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
     if use_weighted_svd and not use_map:
         reconstructor, singular_values = compute_weighted_truncated_svd_reconstructor(
             interaction_matrix, c_phi, n_controlled_modes
-        )
-
-        plt.figure()
-        plt.plot(singular_values)
-        plt.yscale("log")
-        plt.title(
-            f"Singular values of the weighted interaction matrix\n{shift_name} shifts"
-        )
-        plt.xlabel("# modes")
-        plt.ylabel("Singular value")
-        plt.axvline(
-            x=n_controlled_modes, color="r", linestyle="--", label="modal cutoff"
         )
 
     if use_map:
@@ -772,7 +660,7 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
     calibrated_bioedge.wfs.cam.readoutNoise = 0.0
     ngs**tel
 
-    closed_loop_results = close_the_loop(
+    calibrated_bioedge.closed_loop_results = close_the_loop(
         ngs,
         atm,
         tel,
@@ -792,94 +680,6 @@ for shift_name, calibrated_bioedge in calibrated_bioedges.items():
         science_camera=science_camera,
         modal_projector=modal_projector,
     )
-
-    calibrated_bioedge.closed_loop_results = closed_loop_results
-
-    # post processing
-
-    long_exposure_coronograph_psf_lse_sr = np.sum(
-        closed_loop_results.short_exposure_psf[:, :, 100:], axis=2
-    )
-
-    # plots
-
-    # noise propagation
-    plt.figure()
-    plt.plot(np.diag(reconstructor @ reconstructor.T) / calibrated_bioedge.wfs.nSignal)
-    plt.yscale("log")
-    plt.title(f"modal uniform noise propagation\n{shift_name} shifts")
-    plt.xlabel("# modes")
-
-    fitting_error = (
-        np.std(
-            closed_loop_results.fitting_limited_phase_screens[tel.pupil.flatten(), :],
-            axis=0,
-        )
-        if modal_projector is not None
-        else 0.0
-    )
-    # residuals
-    plt.figure()
-    plt.plot(closed_loop_results.total, label="total")
-    plt.plot(closed_loop_results.residual, label="residual")
-    plt.plot(fitting_error, label="fitting error")
-    plt.xlabel("loop iteration")
-    plt.ylabel("residual phase RMS [nm]")
-    plt.title(f"Closed Loop residuals\n{shift_name} shifts")
-    plt.legend()
-
-    # strehls
-    plt.figure()
-    plt.plot(closed_loop_results.strehl, label="strehl")
-    plt.ylabel("strehl phase RMS [nm]")
-    plt.title(f"Closed Loop strehls\n{shift_name} shifts")
-    plt.legend()
-
-    # long exposure PSF
-    plt.figure()
-    plt.imshow(
-        np.log(long_exposure_coronograph_psf_lse_sr),
-        norm="linear",
-        cmap="inferno",
-    )
-    n_controlled_modes_str = (
-        "MAP" if use_map else f"{n_controlled_modes} controlled modes"
-    )
-    plt.title(
-        f"long_exposure_coronograph_psf_lse_sr\nbioedge - {n_controlled_modes_str}\n{shift_name} shifts"
-    )
-
-    if modal_projector is not None:
-        # ideal coronograph fitting limited
-        pupil = tel.pupil.astype(float)
-        n_pix, pad = tel.resolution, 2
-        opd = (
-            closed_loop_results.fitting_limited_phase_screens.copy()
-        )  # (n_pix**2, n_iter)
-        field = pupil.reshape(-1, 1) * np.exp(1j * 2 * np.pi / ngs.wavelength * opd)
-        field = field.reshape(n_pix, n_pix, -1)  # zero outside the pupil
-        # ideal coronagraph: remove the pupil mode, E - <E,P>/<P,P> * P
-        field -= (
-            np.sum(pupil[..., None] * field, axis=(0, 1)) / np.sum(pupil**2)
-        ) * pupil[..., None]
-        # long-exposure PSF
-        psf_le = np.mean(
-            np.abs(
-                np.fft.fftshift(
-                    np.fft.fft2(field, s=(pad * n_pix,) * 2, axes=(0, 1)), axes=(0, 1)
-                )
-            )
-            ** 2,
-            axis=2,
-        )
-        psf_le /= (
-            np.abs(np.fft.fft2(pupil, s=(pad * n_pix,) * 2)).max() ** 2
-        )  # normalise by diffraction-limited peak
-        plt.figure()
-        plt.imshow(psf_le, norm="linear", cmap="inferno")
-        plt.title(
-            f"long exposure psf fitting limited ideal coronagraph\n{shift_name} shifts"
-        )
 
 # %% compute long exposure before and after the coronograph
 
@@ -1162,7 +962,3 @@ with plt.rc_context({**PAPER_STYLE, "axes.prop_cycle": cycler(color=OKABE_ITO[2:
         title_fn=lambda name: name,
         stem=f"radial_average_{REFERENCE_CONFIG}_vs_others_{n_photons_per_frame:.0f}_photons_per_frame",
     )
-
-# %%
-
-plt.show()
