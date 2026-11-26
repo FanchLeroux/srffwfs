@@ -918,10 +918,14 @@ for cal in [*calibrated_pyramids.values(), *calibrated_bioedges.values()]:
 
 # ------------------------- figure settings ------------------------- #
 
+from cycler import cycler
+from srffwfs.plotting import OKABE_ITO
+
 FIGURE_WIDTH_IN = 3.5  # single column; use ~7.2 to span both columns
 FIGURE_HEIGHT_IN = 2.8
 
 PAPER_STYLE = {
+    "axes.prop_cycle": cycler(color=OKABE_ITO),
     "mathtext.fontset": "cm",
     "font.size": 8,
     "axes.titlesize": 8,
@@ -1072,11 +1076,10 @@ def plot_radial_grid(columns, title_fn, stem):
     for j, (col_title, curves) in enumerate(columns):
         for i, (attr, ylabel, start) in enumerate(PANELS):
             ax = axes[i, j]
-            for cal, label, color, ls in curves:
+            for cal, label, ls in curves:
                 ax.plot(
                     r[start:],
                     getattr(cal, attr)[start:n_half],
-                    color=color,
                     ls=ls,
                     label=label,
                 )
@@ -1112,8 +1115,8 @@ columns = [
     (
         pyr.name,
         [
-            (pyr, "Pyramid", "C0", "-"),
-            (bio, "Bi-O edge", "C1", "--"),
+            (pyr, "Pyramid", "-"),
+            (bio, "Bi-O edge", "--"),
         ],
     )
     for pyr, bio in zip(calibrated_pyramids.values(), calibrated_bioedges.values())
@@ -1131,7 +1134,7 @@ with plt.rc_context(PAPER_STYLE):
 # %% ---------- section 2: zero shifts vs other config, one column per WFS ---------- #
 
 REFERENCE_CONFIG = "zeros"
-CURVE_STYLES = (("C0", "-"), ("C1", "--"))  # (reference, other): (color, linestyle)
+CURVE_STYLES = ("-", "--")  # (reference, other) linestyles; colors come from the cycle
 WFS_GROUPS = {  # display name -> dict of CalibratedWfs
     "Pyramid": calibrated_pyramids,
     "Bi-O edge": calibrated_bioedges,
@@ -1147,13 +1150,13 @@ for wfs_name, calibrated in WFS_GROUPS.items():
             (
                 wfs_name,
                 [
-                    (cal, f"{cal.name} shifts", color, ls)
-                    for cal, (color, ls) in zip((reference, other), CURVE_STYLES)
+                    (cal, f"{cal.name} shifts", ls)
+                    for cal, ls in zip((reference, other), CURVE_STYLES)
                 ],
             )
         )
 
-with plt.rc_context(PAPER_STYLE):
+with plt.rc_context({**PAPER_STYLE, "axes.prop_cycle": cycler(color=OKABE_ITO[2:])}):
     plot_radial_grid(
         columns,
         title_fn=lambda name: name,
